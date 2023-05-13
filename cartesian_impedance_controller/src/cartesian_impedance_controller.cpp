@@ -41,7 +41,7 @@
 #include "controller_interface/controller_interface.hpp"
 #include <cartesian_impedance_controller/cartesian_impedance_controller.h>
 
-#include <franka_example_controllers/pseudo_inversion.h>
+#include <cartesian_impedance_controller/pseudo_inversion.h>
 
 namespace cartesian_impedance_controller
 {
@@ -102,6 +102,12 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   m_target_wrench.setZero();
   m_ft_sensor_wrench.setZero();
 
+  // Update joint states
+  Base::updateJointStates();
+
+  // Set reference pose and null space pose to current robot state
+  m_target_frame = Base::m_fk_solver->JntToCart(Base::m_joint_positions);
+  
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -142,17 +148,39 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   // // Write final commands to the hardware interface
   // Base::writeJointControlCmds();
 
-  // Extract the current joint positions
+  // Update joint states
+  Base::updateJointStates();
+
+  // Compute the forward kinematics
+  Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
   // Compute the jacobian
-  Base::m_jnt_to_jac_solver->JntToJac(m_joint_positions, m_jacobian);
+  Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions, Base::m_jacobian);
 
   // Compute the pseudo-inverse of the jacobian
-  ctrl::Matrix6D J_pinv;
-  Eigen::Map<Eigen::MatrixXd> J_eigen(J_kdl.data, J_kdl.rows(), J_kdl.columns());
-  pseudoInverse(m_jacobian.transpose(), J_pinv.data);
-  // Eigen::Map<Eigen::MatrixXd> J_eigen(J_kdl.data, J_kdl.rows(), J_kdl.columns());
+  Eigen::Map<ctrl::MatrixND> jac_pseudo_inverse(J_kdl.data, J_kdl.rows(), J_kdl.columns());
+  pseudoInverse(Base::m_jacobian.transpose(), jac_pseudo_inverse);
   
+  // Compute the motion error
+  ctrl::Vector6D motion_error = computeMotionError();
+  
+  ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number), tau_ext(Base::m_joint_number);
+
+  // Torque calculation for task space
+  tau_task = Base::m_jacobian.transpose() * (m_cartesian_stiffness * motion_error + m_cartesian_damping * (Base::m_jacobian * Base::m_joint_velocities));
+
+  // Torque calculation for null space
+  // tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number) - Base::m_jacobian * jac_pseuodo_inverse) *
+  //               * (m_null_space_stiffness * (- Base::m_joint_positions + m_null_space_pose) - m_null_space_damping * Base::m_joint_velocities);
+
+  // Torque calculation for external wrench
+  tau_ext = Base::m_jacobian.transpose() * m_external_wrench;
+
+  // Final torque calculation
+  ctrl::VectorND tau_tot = - tau_task + tau_null + tau_ext;
+
+  // Write final commands to the hardware interface
+  Base::writeJointControlCmds();
   return controller_interface::return_type::OK;
 }
 
@@ -177,8 +205,6 @@ ctrl::Vector6D CartesianImpedanceController::computeForceError()
 ctrl::Vector6D CartesianImpedanceController::computeMotionError()
 {
   // Compute motion error wrt robot_base_link
-  KDL::Frame m_current_frame;
-  Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
   // Transformation from target -> current corresponds to error = target - current
   KDL::Frame error_kdl;

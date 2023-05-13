@@ -110,7 +110,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
      * @param error The error to minimize
      * @param period The period for this control cycle
      */
-    void computeJointEffortCmds(const ctrl::Vector6D& error, const rclcpp::Duration& period);
+    void computeJointEffortCmds(const ctrl::VectorND& error);
 
     /**
      * @brief Display the given vector in the given robot base link
@@ -169,6 +169,8 @@ class EffortControllerBase : public controller_interface::ControllerInterface
 
     std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
     std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
+    std::shared_ptr<
+      KDL::ChainFkSolverPos_recursive>  m_fk_solver;
 
     /**
      * @brief Allow users to choose the IK solver type on startup
@@ -186,6 +188,8 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface> >
       m_joint_state_vel_handles;
 
+    int m_num_joints;
+
   private:
     std::vector<std::string> m_cmd_interface_types;
     std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>> m_joint_cmd_eff_handles;
@@ -195,6 +199,8 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     SpatialPDController                               m_spatial_controller;
     ctrl::VectorND                                    m_efforts;
     KDL::JntArray                                     m_joint_positions;
+    KDL::JntArray                                     m_joint_positions;
+    KDL::JntArray                                     m_joint_velocities;
 
     // Against multi initialization in multi inheritance scenarios
     bool m_initialized = {false};
@@ -207,6 +213,8 @@ class EffortControllerBase : public controller_interface::ControllerInterface
 
     // Effort limits
     KDL::JntArray m_joint_effort_limits;
+    double m_delta_tau_max;
+    
 };
 
 }

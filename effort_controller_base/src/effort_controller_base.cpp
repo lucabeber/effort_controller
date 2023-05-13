@@ -126,6 +126,13 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
 
+  // Get delta tau maximum
+  m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
+  if (m_robot_description.empty())
+  {
+    m_delta_tau_max = 1; // max delta of 1 Nm
+  }
+
   // Get kinematics specific configuration
   urdf::Model robot_model;
   KDL::Tree   robot_tree;
@@ -177,13 +184,16 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
 
+  // Initialize joint number
+  m_joint_number = (int)m_joint_names.size();
+
   // Initialize effort limits
-  m_joint_effort_limits.resize(m_joint_names.size());
+  m_joint_effort_limits.resize(m_joint_number);
 
   // Parse joint limits
-  KDL::JntArray upper_pos_limits(m_joint_names.size());
-  KDL::JntArray lower_pos_limits(m_joint_names.size());
-  for (size_t i = 0; i < m_joint_names.size(); ++i)
+  KDL::JntArray upper_pos_limits(m_joint_number);
+  KDL::JntArray lower_pos_limits(m_joint_number);
+  for (size_t i = 0; i < m_joint_number; ++i)
   {
     if (!robot_model.getJoint(m_joint_names[i]))
     {
@@ -210,6 +220,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   KDL::Tree tmp("not_relevant");
   tmp.addChain(m_robot_chain,"not_relevant");
   m_forward_kinematics_solver.reset(new KDL::TreeFkSolverPos_recursive(tmp));
+  m_fk_solver.reset(new KDL::ChainFkSolverPos_recursive(m_robot_chain));
   m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
   m_iterations = get_node()->get_parameter("solver.iterations").as_int();
   m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
@@ -240,10 +251,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   m_configured = true;
 
   // Initialize effords to null
-  m_efforts = ctrl::VectorND::Zero(m_joint_names.size());
+  m_efforts = ctrl::VectorND::Zero(m_joint_number);
   
   // Initialize joint state
-  m_joint_positions.resize(m_joint_names.size());
+  m_joint_positions.resize(m_joint_number);
   EffortControllerBase::updateJointStates();
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -282,7 +293,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   {
     RCLCPP_ERROR(get_node()->get_logger(),
                   "Expected %zu '%s' command interfaces, got %zu.",
-                  m_joint_names.size(),
+                  m_joint_number,
                   hardware_interface::HW_IF_EFFORT,
                   m_joint_cmd_eff_handles.size());
     return CallbackReturn::ERROR;
@@ -298,7 +309,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   {
     RCLCPP_ERROR(get_node()->get_logger(),
                  "Expected %zu '%s' state interfaces, got %zu.",
-                 m_joint_names.size(),
+                 m_joint_number,
                  hardware_interface::HW_IF_POSITION,
                  m_joint_state_pos_handles.size());
     return CallbackReturn::ERROR;
@@ -312,7 +323,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   {
     RCLCPP_ERROR(get_node()->get_logger(),
                  "Expected %zu '%s' state interfaces, got %zu.",
-                 m_joint_names.size(),
+                 m_joint_number,
                  hardware_interface::HW_IF_VELOCITY,
                  m_joint_state_vel_handles.size());
     return CallbackReturn::ERROR;
@@ -345,7 +356,7 @@ void EffortControllerBase::writeJointEffortCmds()
   {
     if (type == hardware_interface::HW_IF_EFFORT)
     {
-      for (size_t i = 0; i < m_joint_names.size(); ++i)
+      for (size_t i = 0; i < m_joint_number; ++i)
       {
         // Effort saturation
         if (m_efforts[i] >= m_joint_effort_limits(i))
@@ -362,21 +373,14 @@ void EffortControllerBase::writeJointEffortCmds()
   }
 }
 
-void EffortControllerBase::computeJointEffortCmds(const ctrl::Vector6D& error, const rclcpp::Duration& period)
+void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND& tau)
 {
-
-  m_jnt_to_jac_solver->JntToJac(m_joint_positions, m_jacobian);
-  m_efforts = m_jacobian.data.transpose() * error;
-  // // PD controlled system input
-  // m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
-  // m_effort_input = m_error_scale * m_spatial_controller(error,period);
-
-  // // Simulate one step forward
-  // m_simulated_joint_motion = m_ik_solver->getJointControlCmds(
-  //     period,
-  //     m_effort_input);
-
-  // m_ik_solver->updateKinematics();
+  // Saturation of torque rate
+  for (size_t i = 0; i < m_joint_number; i++)
+    {
+      const double difference = tau[i] - m_efforts[i];
+      m_efforts[i] += std::min(std::max(difference, m_delta_tau_max), m_delta_tau_max);
+  }
 }
 
 ctrl::Vector6D EffortControllerBase::displayInBaseLink(const ctrl::Vector6D& vector, const std::string& from)
@@ -467,7 +471,7 @@ ctrl::Vector6D EffortControllerBase::displayInTipLink(const ctrl::Vector6D& vect
 }
 
 void EffortControllerBase::updateJointStates(){
-  for (auto i = 0; i < (int)m_joint_names.size(); ++i) {
+  for (auto i = 0; i < m_joint_number; ++i) {
     const auto& position_interface = m_joint_state_pos_handles[i].get();
     const auto& velocity_interface = m_joint_state_vel_handles[i].get();
 

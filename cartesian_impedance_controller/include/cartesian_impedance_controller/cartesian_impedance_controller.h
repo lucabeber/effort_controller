@@ -105,13 +105,19 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
 
     void targetWrenchCallback(const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
     void ftSensorWrenchCallback(const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
+    ctrl::Vector6D CartesianImpedanceController::computeMotionError();
 
     rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr m_target_wrench_subscriber;
     rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr m_ft_sensor_wrench_subscriber;
+    ctrl::Vector6D        m_target_frame;
     ctrl::Vector6D        m_target_wrench;
     ctrl::Vector6D        m_ft_sensor_wrench;
     std::string           m_ft_sensor_ref_link;
     KDL::Frame            m_ft_sensor_transform;
+
+    KDL::JntArray         m_null_space;
+    KDL::Frame            m_current_frame;
+
 
     /**
      * Allow users to choose whether to specify their target wrenches in the
