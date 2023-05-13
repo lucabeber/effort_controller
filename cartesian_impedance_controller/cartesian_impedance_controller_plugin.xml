@@ -1,0 +1,12 @@
+<library path="cartesian_impedance_controller">
+
+  <class name="cartesian_impedance_controller/CartesianImpedanceController"
+         type="cartesian_impedance_controller::CartesianImpedanceController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Steer your robot's end-effector with forces and torques.
+      It's ideal for teleoperation with contacts.
+    </description>
+  </class>
+
+</library>

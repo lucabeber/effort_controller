@@ -469,8 +469,10 @@ ctrl::Vector6D EffortControllerBase::displayInTipLink(const ctrl::Vector6D& vect
 void EffortControllerBase::updateJointStates(){
   for (auto i = 0; i < (int)m_joint_names.size(); ++i) {
     const auto& position_interface = m_joint_state_pos_handles[i].get();
+    const auto& velocity_interface = m_joint_state_vel_handles[i].get();
 
     m_joint_positions(i) = position_interface.get_value();
+    m_joint_velocities(i) = velocity_interface.get_value();
   }
 }
 
