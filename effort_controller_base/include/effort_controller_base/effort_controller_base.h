@@ -164,13 +164,14 @@ class EffortControllerBase : public controller_interface::ControllerInterface
       return false;
     }
 
+    void computeNullSpace(const ctrl::Vector6D& desired_pose, const rclcpp::Duration& period);
+
     KDL::Chain m_robot_chain;
     KDL::Jacobian  m_jacobian;            // Jacobian
 
     std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
     std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
-    std::shared_ptr<
-      KDL::ChainFkSolverPos_recursive>  m_fk_solver;
+    std::shared_ptr<KDL::ChainFkSolverPos_recursive>  m_fk_solver;
 
     /**
      * @brief Allow users to choose the IK solver type on startup
@@ -188,7 +189,10 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface> >
       m_joint_state_vel_handles;
 
-    int m_num_joints;
+    size_t m_joint_number;
+
+    KDL::JntArray                                     m_joint_positions;
+    KDL::JntArray                                     m_joint_velocities;
 
   private:
     std::vector<std::string> m_cmd_interface_types;
@@ -198,9 +202,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     trajectory_msgs::msg::JointTrajectoryPoint        m_simulated_joint_motion;
     SpatialPDController                               m_spatial_controller;
     ctrl::VectorND                                    m_efforts;
-    KDL::JntArray                                     m_joint_positions;
-    KDL::JntArray                                     m_joint_positions;
-    KDL::JntArray                                     m_joint_velocities;
+    
 
     // Against multi initialization in multi inheritance scenarios
     bool m_initialized = {false};

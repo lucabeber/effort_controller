@@ -41,7 +41,7 @@
 #define EFFORT_IMPEDANCE_CONTROLLER_H_INCLUDED
 
 #include "geometry_msgs/msg/wrench_stamped.hpp"
-#include <effort_controller_base/ROS2VersionConfig.h>
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include <effort_controller_base/effort_controller_base.h>
 #include <controller_interface/controller_interface.hpp>
 
@@ -90,6 +90,9 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
 
     using Base = effort_controller_base::EffortControllerBase;
 
+    ctrl::Matrix6D          m_cartesian_stiffness;
+    ctrl::Matrix6D          m_cartesian_damping;
+
   protected:
     /**
      * @brief Compute the net force of target wrench and measured sensor wrench
@@ -104,12 +107,12 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
     ctrl::Vector6D        compensateGravity();
 
     void targetWrenchCallback(const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
-    void ftSensorWrenchCallback(const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
-    ctrl::Vector6D CartesianImpedanceController::computeMotionError();
+    void targetFrameCallback(const geometry_msgs::msg::PoseStamped::SharedPtr target);
+    ctrl::Vector6D computeMotionError();
 
     rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr m_target_wrench_subscriber;
-    rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr m_ft_sensor_wrench_subscriber;
-    ctrl::Vector6D        m_target_frame;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr m_target_frame_subscriber;
+    KDL::Frame            m_target_frame;
     ctrl::Vector6D        m_target_wrench;
     ctrl::Vector6D        m_ft_sensor_wrench;
     std::string           m_ft_sensor_ref_link;

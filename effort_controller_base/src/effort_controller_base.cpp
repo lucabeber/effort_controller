@@ -185,7 +185,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   }
 
   // Initialize joint number
-  m_joint_number = (int)m_joint_names.size();
+  m_joint_number = m_joint_names.size();
 
   // Initialize effort limits
   m_joint_effort_limits.resize(m_joint_number);
@@ -255,7 +255,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   
   // Initialize joint state
   m_joint_positions.resize(m_joint_number);
-  EffortControllerBase::updateJointStates();
+  m_joint_velocities.resize(m_joint_number);
+  writeJointEffortCmds();
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -329,20 +330,16 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     return CallbackReturn::ERROR;
   }
 
-
-
-  
-
   // Copy joint state to internal simulation
-  // if (!m_ik_solver->setStartState(m_joint_state_pos_handles))
-  // {
-  //   RCLCPP_ERROR(get_node()->get_logger(), "Could not set start state");
-  //   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
-  // };
-  // m_ik_solver->updateKinematics();
+  if (!m_ik_solver->setStartState(m_joint_state_pos_handles))
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "Could not set start state");
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
+  };
+  m_ik_solver->updateKinematics();
 
   // Provide safe command buffers with starting where we are
-  computeJointEffortCmds(ctrl::Vector6D::Zero(), rclcpp::Duration::from_seconds(0));
+  computeJointEffortCmds(ctrl::VectorND::Zero(m_joint_number));
   writeJointEffortCmds();
 
   m_active = true;
@@ -381,6 +378,20 @@ void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND& tau)
       const double difference = tau[i] - m_efforts[i];
       m_efforts[i] += std::min(std::max(difference, m_delta_tau_max), m_delta_tau_max);
   }
+}
+
+void EffortControllerBase::computeNullSpace(const ctrl::Vector6D& desired_pose, const rclcpp::Duration& period)
+{
+  // PD controlled system input
+  // m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
+  // m_cartesian_input = m_error_scale * m_spatial_controller(error,period);
+
+  // Simulate one step forward
+  m_simulated_joint_motion = m_ik_solver->getJointControlCmds(
+      period,
+      desired_pose);
+
+  m_ik_solver->updateKinematics();
 }
 
 ctrl::Vector6D EffortControllerBase::displayInBaseLink(const ctrl::Vector6D& vector, const std::string& from)
@@ -471,7 +482,7 @@ ctrl::Vector6D EffortControllerBase::displayInTipLink(const ctrl::Vector6D& vect
 }
 
 void EffortControllerBase::updateJointStates(){
-  for (auto i = 0; i < m_joint_number; ++i) {
+  for (size_t i = 0; i < m_joint_number; ++i) {
     const auto& position_interface = m_joint_state_pos_handles[i].get();
     const auto& velocity_interface = m_joint_state_vel_handles[i].get();
 

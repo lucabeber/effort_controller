@@ -62,6 +62,15 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   auto_declare<std::string>("ft_sensor_ref_link", "");
   auto_declare<bool>("hand_frame_control", true);
 
+  constexpr double default_lin_stiff = 500.0;
+  constexpr double default_rot_stiff = 50.0;
+  auto_declare<double>("stiffness.trans_x", default_lin_stiff);
+  auto_declare<double>("stiffness.trans_y", default_lin_stiff);
+  auto_declare<double>("stiffness.trans_z", default_lin_stiff);
+  auto_declare<double>("stiffness.rot_x", default_rot_stiff);
+  auto_declare<double>("stiffness.rot_y", default_rot_stiff);
+  auto_declare<double>("stiffness.rot_z", default_rot_stiff);
+
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;;
 }
 
@@ -85,6 +94,27 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
 
+  // Set stiffness
+  ctrl::Vector6D tmp;
+  tmp[0] = get_node()->get_parameter("stiffness.trans_x").as_double();
+  tmp[1] = get_node()->get_parameter("stiffness.trans_y").as_double();
+  tmp[2] = get_node()->get_parameter("stiffness.trans_z").as_double();
+  tmp[3] = get_node()->get_parameter("stiffness.rot_x").as_double();
+  tmp[4] = get_node()->get_parameter("stiffness.rot_y").as_double();
+  tmp[5] = get_node()->get_parameter("stiffness.rot_z").as_double();
+
+  m_cartesian_stiffness = tmp.asDiagonal();
+
+  // Set damping
+  tmp[0] = 2 * 0.707 * sqrt(tmp[0]);
+  tmp[1] = 2 * 0.707 * sqrt(tmp[1]);
+  tmp[2] = 2 * 0.707 * sqrt(tmp[2]);
+  tmp[3] = 2 * 0.707 * sqrt(tmp[3]);
+  tmp[4] = 2 * 0.707 * sqrt(tmp[4]);
+  tmp[5] = 2 * 0.707 * sqrt(tmp[5]);
+
+  m_cartesian_damping = tmp.asDiagonal();
+
   // Make sure sensor wrenches are interpreted correctly
   setFtSensorReferenceFrame(Base::m_end_effector_link);
 
@@ -93,20 +123,22 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
     10,
     std::bind(&CartesianImpedanceController::targetWrenchCallback, this, std::placeholders::_1));
 
-  m_ft_sensor_wrench_subscriber =
-    get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
-      get_node()->get_name() + std::string("/ft_sensor_wrench"),
-      10,
-      std::bind(&CartesianImpedanceController::ftSensorWrenchCallback, this, std::placeholders::_1));
+  // m_ft_sensor_wrench_subscriber =
+  //   get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
+  //     get_node()->get_name() + std::string("/ft_sensor_wrench"),
+  //     10,
+  //     std::bind(&CartesianImpedanceController::ftSensorWrenchCallback, this, std::placeholders::_1));
+
+  m_target_frame_subscriber = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
+        get_node()->get_name() + std::string("/target_frame"),
+        3,
+        std::bind(&CartesianImpedanceController::targetFrameCallback, this, std::placeholders::_1));
 
   m_target_wrench.setZero();
   m_ft_sensor_wrench.setZero();
 
   // Update joint states
   Base::updateJointStates();
-
-  // Set reference pose and null space pose to current robot state
-  m_target_frame = Base::m_fk_solver->JntToCart(Base::m_joint_positions);
   
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -122,8 +154,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
     const rclcpp_lifecycle::State & previous_state)
 {
   // Stop drifting by sending zero joint velocities
-  Base::computeJointControlCmds(ctrl::Vector6D::Zero(), rclcpp::Duration::from_seconds(0));
-  Base::writeJointControlCmds();
+  Base::computeJointEffortCmds(ctrl::Vector6D::Zero());
+  Base::writeJointEffortCmds();
   Base::on_deactivate(previous_state);
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -157,9 +189,14 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   // Compute the jacobian
   Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions, Base::m_jacobian);
 
+
   // Compute the pseudo-inverse of the jacobian
-  Eigen::Map<ctrl::MatrixND> jac_pseudo_inverse(J_kdl.data, J_kdl.rows(), J_kdl.columns());
-  pseudoInverse(Base::m_jacobian.transpose(), jac_pseudo_inverse);
+  ctrl::MatrixND jac = Base::m_jacobian.data;
+  ctrl::MatrixND jac_pseudo_inverse;
+  pseudoInverse(jac.transpose(), &jac_pseudo_inverse);
+
+  // Redefine joints velocities in Eigen format
+  ctrl::VectorND q_dot = Base::m_joint_velocities.data;
   
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
@@ -167,20 +204,23 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number), tau_ext(Base::m_joint_number);
 
   // Torque calculation for task space
-  tau_task = Base::m_jacobian.transpose() * (m_cartesian_stiffness * motion_error + m_cartesian_damping * (Base::m_jacobian * Base::m_joint_velocities));
+  tau_task = jac.transpose() * (m_cartesian_stiffness * motion_error + m_cartesian_damping * (jac * q_dot));
 
   // Torque calculation for null space
   // tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number) - Base::m_jacobian * jac_pseuodo_inverse) *
   //               * (m_null_space_stiffness * (- Base::m_joint_positions + m_null_space_pose) - m_null_space_damping * Base::m_joint_velocities);
 
   // Torque calculation for external wrench
-  tau_ext = Base::m_jacobian.transpose() * m_external_wrench;
+  tau_ext = jac.transpose() * m_target_wrench;
 
   // Final torque calculation
   ctrl::VectorND tau_tot = - tau_task + tau_null + tau_ext;
 
+  // Saturation of the torque
+  Base::computeJointEffortCmds(tau_tot);
+
   // Write final commands to the hardware interface
-  Base::writeJointControlCmds();
+  Base::writeJointEffortCmds();
   return controller_interface::return_type::OK;
 }
 
@@ -204,7 +244,9 @@ ctrl::Vector6D CartesianImpedanceController::computeForceError()
 
 ctrl::Vector6D CartesianImpedanceController::computeMotionError()
 {
-  // Compute motion error wrt robot_base_link
+  // Redefine eigen vectors in kdl format
+  KDL::Frame target_frame_kdl, current_frame_kdl;
+
 
   // Transformation from target -> current corresponds to error = target - current
   KDL::Frame error_kdl;
