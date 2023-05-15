@@ -382,9 +382,8 @@ void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND& tau)
 
 void EffortControllerBase::computeNullSpace(const ctrl::Vector6D& desired_pose, const rclcpp::Duration& period)
 {
-  // PD controlled system input
-  // m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
-  // m_cartesian_input = m_error_scale * m_spatial_controller(error,period);
+  // Synchronize the internal model and the real robot
+  m_ik_solver->synchronizeJointPositions(m_joint_state_pos_handles);
 
   // Simulate one step forward
   m_simulated_joint_motion = m_ik_solver->getJointControlCmds(

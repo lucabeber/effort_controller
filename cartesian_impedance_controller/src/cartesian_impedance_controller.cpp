@@ -163,32 +163,18 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
 controller_interface::return_type CartesianImpedanceController::update(const rclcpp::Time& time,
                                                                    const rclcpp::Duration& period)
 {
-  // // Synchronize the internal model and the real robot
-  // Base::m_ik_solver->synchronizeJointPositions(Base::m_joint_state_pos_handles);
-
-  // // Control the robot motion in such a way that the resulting net force
-  // // vanishes.  The internal 'simulation time' is deliberately independent of
-  // // the outer control cycle.
-  // auto internal_period = rclcpp::Duration::from_seconds(0.02);
-
-  // // Compute the net force
-  // ctrl::Vector6D error = computeForceError();
-
-  // // Turn Effort error into joint motion
-  // Base::computeJointControlCmds(error,internal_period);
-
-  // // Write final commands to the hardware interface
-  // Base::writeJointControlCmds();
-
-  // Update joint states
+    // Update joint states
   Base::updateJointStates();
+
+  // Find the desired joints positions
+  Base::computeNullSpace(m_target_frame, period)
+  m_null_space_pose = Base::m_simulated_joint_motion;
 
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
   // Compute the jacobian
   Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions, Base::m_jacobian);
-
 
   // Compute the pseudo-inverse of the jacobian
   ctrl::MatrixND jac = Base::m_jacobian.data;
@@ -207,8 +193,8 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   tau_task = jac.transpose() * (m_cartesian_stiffness * motion_error + m_cartesian_damping * (jac * q_dot));
 
   // Torque calculation for null space
-  // tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number) - Base::m_jacobian * jac_pseuodo_inverse) *
-  //               * (m_null_space_stiffness * (- Base::m_joint_positions + m_null_space_pose) - m_null_space_damping * Base::m_joint_velocities);
+  tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number) - jac * jac_pseuodo_inverse) *
+                * (m_null_space_stiffness * (- Base::m_joint_positions + m_null_space_pose) - m_null_space_damping * Base::m_joint_velocities);
 
   // Torque calculation for external wrench
   tau_ext = jac.transpose() * m_target_wrench;
@@ -221,6 +207,7 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
 
   // Write final commands to the hardware interface
   Base::writeJointEffortCmds();
+  
   return controller_interface::return_type::OK;
 }
 
