@@ -115,6 +115,12 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
 
   m_cartesian_damping = tmp.asDiagonal();
 
+  // Set nullspace stiffness
+  m_null_space_stiffness = 20;
+
+  // Set nullspace damping
+  m_null_space_damping = 2 * 0.707 * sqrt(m_null_space_stiffness);
+
   // Make sure sensor wrenches are interpreted correctly
   setFtSensorReferenceFrame(Base::m_end_effector_link);
 
@@ -147,6 +153,16 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
     const rclcpp_lifecycle::State & previous_state)
 {
   Base::on_activate(previous_state);
+
+  // Update joint states
+  Base::updateJointStates();
+
+  // Compute the forward kinematics
+  Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
+
+  // Set the target frame to the current frame
+  m_target_frame = m_current_frame;
+  
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -163,12 +179,11 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
 controller_interface::return_type CartesianImpedanceController::update(const rclcpp::Time& time,
                                                                    const rclcpp::Duration& period)
 {
-    // Update joint states
+  // Update joint states
   Base::updateJointStates();
 
   // Find the desired joints positions
-  Base::computeNullSpace(m_target_frame, period)
-  m_null_space_pose = Base::m_simulated_joint_motion;
+  Base::computeNullSpace(m_target_frame);
 
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
@@ -182,7 +197,9 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   pseudoInverse(jac.transpose(), &jac_pseudo_inverse);
 
   // Redefine joints velocities in Eigen format
+  ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
+  ctrl::VectorND q_null_space = Base::m_simulated_joint_motion.data;
   
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
@@ -193,8 +210,8 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   tau_task = jac.transpose() * (m_cartesian_stiffness * motion_error + m_cartesian_damping * (jac * q_dot));
 
   // Torque calculation for null space
-  tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number) - jac * jac_pseuodo_inverse) *
-                * (m_null_space_stiffness * (- Base::m_joint_positions + m_null_space_pose) - m_null_space_damping * Base::m_joint_velocities);
+  tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number,Base::m_joint_number) - jac * jac_pseudo_inverse)
+    * (m_null_space_stiffness * (- q + q_null_space) - m_null_space_damping * q_dot);
 
   // Torque calculation for external wrench
   tau_ext = jac.transpose() * m_target_wrench;

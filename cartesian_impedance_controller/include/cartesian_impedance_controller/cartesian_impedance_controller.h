@@ -92,6 +92,8 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
 
     ctrl::Matrix6D          m_cartesian_stiffness;
     ctrl::Matrix6D          m_cartesian_damping;
+    double                  m_null_space_stiffness; 
+    double                  m_null_space_damping; 
 
   protected:
     /**

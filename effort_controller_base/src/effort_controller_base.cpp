@@ -113,18 +113,18 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   }
 
   // Load user specified inverse kinematics solver
-  std::string ik_solver = get_node()->get_parameter("ik_solver").as_string();
-  m_solver_loader.reset(new pluginlib::ClassLoader<IKSolver>(
-    "effort_controller_base", "effort_controller_base::IKSolver"));
-  try
-  {
-    m_ik_solver = m_solver_loader->createSharedInstance(ik_solver);
-  }
-  catch (pluginlib::PluginlibException& ex)
-  {
-    RCLCPP_ERROR(get_node()->get_logger(), ex.what());
-    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
-  }
+  // std::string ik_solver = get_node()->get_parameter("ik_solver").as_string();
+  // m_solver_loader.reset(new pluginlib::ClassLoader<IKSolver>(
+  //   "effort_controller_base", "effort_controller_base::IKSolver"));
+  // try
+  // {
+  //   m_ik_solver = m_solver_loader->createSharedInstance(ik_solver);
+  // }
+  // catch (pluginlib::PluginlibException& ex)
+  // {
+  //   RCLCPP_ERROR(get_node()->get_logger(), ex.what());
+  //   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
+  // }
 
   // Get delta tau maximum
   m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
@@ -216,11 +216,14 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   }
 
   // Initialize solvers
-  m_ik_solver->init(get_node(),m_robot_chain,upper_pos_limits,lower_pos_limits);
+  // m_ik_solver->init(get_node(),m_robot_chain,upper_pos_limits,lower_pos_limits);
   KDL::Tree tmp("not_relevant");
   tmp.addChain(m_robot_chain,"not_relevant");
   m_forward_kinematics_solver.reset(new KDL::TreeFkSolverPos_recursive(tmp));
   m_fk_solver.reset(new KDL::ChainFkSolverPos_recursive(m_robot_chain));
+  m_ik_solver_vel.reset(new KDL::ChainIkSolverVel_pinv(m_robot_chain));
+  m_ik_solver.reset(new KDL::ChainIkSolverPos_NR_JL(m_robot_chain, 
+    lower_pos_limits, upper_pos_limits, *m_fk_solver, *m_ik_solver_vel, 100, 1e-6));
   m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
   m_iterations = get_node()->get_parameter("solver.iterations").as_int();
   m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
@@ -331,12 +334,12 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   }
 
   // Copy joint state to internal simulation
-  if (!m_ik_solver->setStartState(m_joint_state_pos_handles))
-  {
-    RCLCPP_ERROR(get_node()->get_logger(), "Could not set start state");
-    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
-  };
-  m_ik_solver->updateKinematics();
+  // if (!m_ik_solver->setStartState(m_joint_state_pos_handles))
+  // {
+  //   RCLCPP_ERROR(get_node()->get_logger(), "Could not set start state");
+  //   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
+  // };
+  // m_ik_solver->updateKinematics();
 
   // Provide safe command buffers with starting where we are
   computeJointEffortCmds(ctrl::VectorND::Zero(m_joint_number));
@@ -380,17 +383,21 @@ void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND& tau)
   }
 }
 
-void EffortControllerBase::computeNullSpace(const ctrl::Vector6D& desired_pose, const rclcpp::Duration& period)
+void EffortControllerBase::computeNullSpace(const KDL::Frame& desired_pose)
 {
-  // Synchronize the internal model and the real robot
-  m_ik_solver->synchronizeJointPositions(m_joint_state_pos_handles);
+  // Invese kinematics
+  int ret = m_ik_solver->CartToJnt(
+      m_joint_positions,
+      desired_pose,
+      m_simulated_joint_motion);
 
-  // Simulate one step forward
-  m_simulated_joint_motion = m_ik_solver->getJointControlCmds(
-      period,
-      desired_pose);
+  // Check if solution was found
+  if (ret < 0)
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "Could not find IK solution");
+    return;
+  }
 
-  m_ik_solver->updateKinematics();
 }
 
 ctrl::Vector6D EffortControllerBase::displayInBaseLink(const ctrl::Vector6D& vector, const std::string& from)
@@ -404,7 +411,7 @@ ctrl::Vector6D EffortControllerBase::displayInBaseLink(const ctrl::Vector6D& vec
 
   KDL::Frame transform_kdl;
   m_forward_kinematics_solver->JntToCart(
-      m_ik_solver->getPositions(),
+      m_joint_positions,
       transform_kdl,
       from);
 
@@ -426,7 +433,7 @@ ctrl::Matrix6D EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D& ten
   // Get rotation to base
   KDL::Frame R_kdl;
   m_forward_kinematics_solver->JntToCart(
-      m_ik_solver->getPositions(),
+      m_joint_positions,
       R_kdl,
       from);
 
@@ -463,7 +470,7 @@ ctrl::Vector6D EffortControllerBase::displayInTipLink(const ctrl::Vector6D& vect
 
   KDL::Frame transform_kdl;
   m_forward_kinematics_solver->JntToCart(
-      m_ik_solver->getPositions(),
+      m_joint_positions,
       transform_kdl,
       to);
 

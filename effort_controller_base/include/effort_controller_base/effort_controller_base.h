@@ -51,6 +51,8 @@
 #include <hardware_interface/loaned_state_interface.hpp>
 #include <kdl/treefksolverpos_recursive.hpp>
 #include <kdl/chainjnttojacsolver.hpp>
+#include <kdl/chainiksolverpos_nr_jl.hpp>
+#include <kdl/chainiksolvervel_pinv.hpp>
 #include <memory>
 #include <pluginlib/class_loader.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -164,7 +166,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
       return false;
     }
 
-    void computeNullSpace(const ctrl::Vector6D& desired_pose, const rclcpp::Duration& period);
+    void computeNullSpace(const KDL::Frame& desired_pose);
 
     KDL::Chain m_robot_chain;
     KDL::Jacobian  m_jacobian;            // Jacobian
@@ -172,12 +174,13 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
     std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
     std::shared_ptr<KDL::ChainFkSolverPos_recursive>  m_fk_solver;
-
+    std::shared_ptr<KDL::ChainIkSolverPos_NR_JL>  m_ik_solver;
+    std::shared_ptr<KDL::ChainIkSolverVel_pinv>  m_ik_solver_vel;
     /**
      * @brief Allow users to choose the IK solver type on startup
      */
-    std::shared_ptr<pluginlib::ClassLoader<IKSolver> > m_solver_loader;
-    std::shared_ptr<IKSolver> m_ik_solver;
+    // std::shared_ptr<pluginlib::ClassLoader<IKSolver> > m_solver_loader;
+    // std::shared_ptr<IKSolver> m_ik_solver;
 
     // Dynamic parameters
     std::string m_end_effector_link;
@@ -193,13 +196,13 @@ class EffortControllerBase : public controller_interface::ControllerInterface
 
     KDL::JntArray                                     m_joint_positions;
     KDL::JntArray                                     m_joint_velocities;
+    KDL::JntArray                                     m_simulated_joint_motion;
 
   private:
     std::vector<std::string> m_cmd_interface_types;
     std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>> m_joint_cmd_eff_handles;
 
     std::vector<std::string>                          m_joint_names;
-    trajectory_msgs::msg::JointTrajectoryPoint        m_simulated_joint_motion;
     SpatialPDController                               m_spatial_controller;
     ctrl::VectorND                                    m_efforts;
     
