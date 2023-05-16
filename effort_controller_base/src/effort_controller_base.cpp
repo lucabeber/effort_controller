@@ -112,20 +112,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-  // Load user specified inverse kinematics solver
-  // std::string ik_solver = get_node()->get_parameter("ik_solver").as_string();
-  // m_solver_loader.reset(new pluginlib::ClassLoader<IKSolver>(
-  //   "effort_controller_base", "effort_controller_base::IKSolver"));
-  // try
-  // {
-  //   m_ik_solver = m_solver_loader->createSharedInstance(ik_solver);
-  // }
-  // catch (pluginlib::PluginlibException& ex)
-  // {
-  //   RCLCPP_ERROR(get_node()->get_logger(), ex.what());
-  //   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
-  // }
-
   // Get delta tau maximum
   m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
   if (m_robot_description.empty())
@@ -217,6 +203,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
 
   // Initialize solvers
   // m_ik_solver->init(get_node(),m_robot_chain,upper_pos_limits,lower_pos_limits);
+  KDL::Vector grav(0.0, 0.0, -9.81);
   KDL::Tree tmp("not_relevant");
   tmp.addChain(m_robot_chain,"not_relevant");
   m_forward_kinematics_solver.reset(new KDL::TreeFkSolverPos_recursive(tmp));
@@ -225,6 +212,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   m_ik_solver.reset(new KDL::ChainIkSolverPos_NR_JL(m_robot_chain, 
     lower_pos_limits, upper_pos_limits, *m_fk_solver, *m_ik_solver_vel, 100, 1e-6));
   m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
+  m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain,grav));
   m_iterations = get_node()->get_parameter("solver.iterations").as_int();
   m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
 

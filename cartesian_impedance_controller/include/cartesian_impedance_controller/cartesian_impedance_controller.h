@@ -88,12 +88,15 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
 
     controller_interface::return_type update(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
+    ctrl::VectorND computeTorque();
+
     using Base = effort_controller_base::EffortControllerBase;
 
     ctrl::Matrix6D          m_cartesian_stiffness;
     ctrl::Matrix6D          m_cartesian_damping;
     double                  m_null_space_stiffness; 
     double                  m_null_space_damping; 
+    ctrl::Vector6D          m_target_wrench;
 
   protected:
     /**
@@ -115,7 +118,6 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
     rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr m_target_wrench_subscriber;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr m_target_frame_subscriber;
     KDL::Frame            m_target_frame;
-    ctrl::Vector6D        m_target_wrench;
     ctrl::Vector6D        m_ft_sensor_wrench;
     std::string           m_ft_sensor_ref_link;
     KDL::Frame            m_ft_sensor_transform;

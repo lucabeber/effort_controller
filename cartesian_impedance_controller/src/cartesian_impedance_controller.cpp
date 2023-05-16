@@ -182,6 +182,67 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   // Update joint states
   Base::updateJointStates();
 
+  // Compute the torque to applay at the joints
+  ctrl::VectorND tau_tot = computeTorque();
+
+  // Saturation of the torque
+  Base::computeJointEffortCmds(tau_tot);
+
+  // Write final commands to the hardware interface
+  Base::writeJointEffortCmds();
+
+  return controller_interface::return_type::OK;
+}
+
+ctrl::Vector6D CartesianImpedanceController::computeForceError()
+{
+  ctrl::Vector6D target_wrench;
+  m_hand_frame_control = get_node()->get_parameter("hand_frame_control").as_bool();
+
+  if (m_hand_frame_control) // Assume end-effector frame by convention
+  {
+    target_wrench = Base::displayInBaseLink(m_target_wrench,Base::m_end_effector_link);
+  }
+  else // Default to robot base frame
+  {
+    target_wrench = m_target_wrench;
+  }
+
+  // Superimpose target wrench and sensor wrench in base frame
+  return Base::displayInBaseLink(m_ft_sensor_wrench,m_new_ft_sensor_ref) + target_wrench;
+}
+
+ctrl::Vector6D CartesianImpedanceController::computeMotionError()
+{
+  // Redefine eigen vectors in kdl format
+  KDL::Frame target_frame_kdl, current_frame_kdl;
+
+  // Transformation from target -> current corresponds to error = target - current
+  KDL::Frame error_kdl;
+  error_kdl.M = m_target_frame.M * m_current_frame.M.Inverse();
+  error_kdl.p = m_target_frame.p - m_current_frame.p;
+
+  // Use Rodrigues Vector for a compact representation of orientation errors
+  // Only for angles within [0,Pi)
+  KDL::Vector rot_axis = KDL::Vector::Zero();
+  double angle    = error_kdl.M.GetRotAngle(rot_axis);   // rot_axis is normalized
+
+  rot_axis = rot_axis * angle;
+
+  // Reassign values
+  ctrl::Vector6D error;
+  error(0) = error_kdl.p.x();
+  error(1) = error_kdl.p.y();
+  error(2) = error_kdl.p.z();
+  error(3) = rot_axis(0);
+  error(4) = rot_axis(1);
+  error(5) = rot_axis(2);
+
+  return error;
+}
+
+ctrl::VectorND CartesianImpedanceController::computeTorque()
+{
   // Find the desired joints positions
   Base::computeNullSpace(m_target_frame);
 
@@ -217,64 +278,8 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   tau_ext = jac.transpose() * m_target_wrench;
 
   // Final torque calculation
-  ctrl::VectorND tau_tot = - tau_task + tau_null + tau_ext;
-
-  // Saturation of the torque
-  Base::computeJointEffortCmds(tau_tot);
-
-  // Write final commands to the hardware interface
-  Base::writeJointEffortCmds();
-  
-  return controller_interface::return_type::OK;
-}
-
-ctrl::Vector6D CartesianImpedanceController::computeForceError()
-{
-  ctrl::Vector6D target_wrench;
-  m_hand_frame_control = get_node()->get_parameter("hand_frame_control").as_bool();
-
-  if (m_hand_frame_control) // Assume end-effector frame by convention
-  {
-    target_wrench = Base::displayInBaseLink(m_target_wrench,Base::m_end_effector_link);
-  }
-  else // Default to robot base frame
-  {
-    target_wrench = m_target_wrench;
-  }
-
-  // Superimpose target wrench and sensor wrench in base frame
-  return Base::displayInBaseLink(m_ft_sensor_wrench,m_new_ft_sensor_ref) + target_wrench;
-}
-
-ctrl::Vector6D CartesianImpedanceController::computeMotionError()
-{
-  // Redefine eigen vectors in kdl format
-  KDL::Frame target_frame_kdl, current_frame_kdl;
-
-
-  // Transformation from target -> current corresponds to error = target - current
-  KDL::Frame error_kdl;
-  error_kdl.M = m_target_frame.M * m_current_frame.M.Inverse();
-  error_kdl.p = m_target_frame.p - m_current_frame.p;
-
-  // Use Rodrigues Vector for a compact representation of orientation errors
-  // Only for angles within [0,Pi)
-  KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle    = error_kdl.M.GetRotAngle(rot_axis);   // rot_axis is normalized
-
-  rot_axis = rot_axis * angle;
-
-  // Reassign values
-  ctrl::Vector6D error;
-  error(0) = error_kdl.p.x();
-  error(1) = error_kdl.p.y();
-  error(2) = error_kdl.p.z();
-  error(3) = rot_axis(0);
-  error(4) = rot_axis(1);
-  error(5) = rot_axis(2);
-
-  return error;
-}
+  return - tau_task + tau_null + tau_ext;
+}  
 // void CartesianImpedanceController::setFtSensorReferenceFrame(const std::string& new_ref)
 // {
 //   // Compute static transform from the force torque sensor to the new reference

@@ -148,7 +148,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   {
     return TYPE::ERROR;
   }
-
+  
   // Reset external forces, desired forces and desired stiffness
   ctrl::Vector3D v = Eigen::Vector3d::Zero();
   ctrl::Matrix3D m = Eigen::Matrix3d::Zero();
@@ -178,78 +178,39 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
 controller_interface::return_type CartesianAdaptiveImpedanceController::update(const rclcpp::Time& time,
                                                                    const rclcpp::Duration& period)
 {
-  USING_NAMESPACE_QPOASES
+  // Update joint states
+  Base::updateJointStates();
 
-	/* Setup data of first QP. */
-	real_t H[2*2] = { 1.0, 0.0, 0.0, 0.5 };
-	real_t A[1*2] = { 1.0, 1.0 };
-	real_t g[2] = { 1.5, 1.0 };
-	real_t lb[2] = { 0.5, -2.0 };
-	real_t ub[2] = { 5.0, 2.0 };
-	real_t lbA[1] = { -1.0 };
-	real_t ubA[1] = { 2.0 };
+  // Compute the torque to applay at the joints
+  ctrl::VectorND tau_tot = CartesianImpedanceController::computeTorque();
 
-	/* Setup data of second QP. */
-	real_t g_new[2] = { 1.0, 1.5 };
-	real_t lb_new[2] = { 0.0, -1.0 };
-	real_t ub_new[2] = { 5.0, -0.5 };
-	real_t lbA_new[1] = { -2.0 };
-	real_t ubA_new[1] = { 1.0 };
+  // Saturation of the torque
+  Base::computeJointEffortCmds(tau_tot);
 
-
-	/* Setting up QProblem object. */
-	QProblem example( 2,1 );
-
-	Options options;
-	example.setOptions( options );
-
-	/* Solve first QP. */
-	int_t nWSR = 10;
-	example.init( H,g,A,lb,ub,lbA,ubA, nWSR );
-
-	/* Get and print solution of first QP. */
-	real_t xOpt[2];
-	real_t yOpt[2+1];
-	example.getPrimalSolution( xOpt );
-	example.getDualSolution( yOpt );
-	printf( "\nxOpt = [ %e, %e ];  yOpt = [ %e, %e, %e ];  objVal = %e\n\n", 
-			xOpt[0],xOpt[1],yOpt[0],yOpt[1],yOpt[2],example.getObjVal() );
-	
-	/* Solve second QP. */
-	nWSR = 10;
-	example.hotstart( g_new,lb_new,ub_new,lbA_new,ubA_new, nWSR );
-
-	/* Get and print solution of second QP. */
-	example.getPrimalSolution( xOpt );
-	example.getDualSolution( yOpt );
-	printf( "\nxOpt = [ %e, %e ];  yOpt = [ %e, %e, %e ];  objVal = %e\n\n", 
-			xOpt[0],xOpt[1],yOpt[0],yOpt[1],yOpt[2],example.getObjVal() );
-
-	example.printOptions();
-  // // Synchronize the internal model and the real robot
-  // Base::m_ik_solver->synchronizeJointPositions(Base::m_joint_state_pos_handles);
-
-  // // Control the robot motion in such a way that the resulting net force
-  // // vanishes. This internal control needs some simulation time steps.
-  // for (int i = 0; i < Base::m_iterations; ++i)
-  // {
-  //   // The internal 'simulation time' is deliberately independent of the outer
-  //   // control cycle.
-  //   auto internal_period = rclcpp::Duration::from_seconds(0.02);
-
-  //   // Compute the net force
-  //   ctrl::Vector6D error = computeComplianceError();
-
-  //   // Turn Cartesian error into joint motion
-  //   Base::computeJointControlCmds(error,internal_period);
-  // }
-
-  // // Write final commands to the hardware interface
-  // Base::writeJointControlCmds();
-
+  // Write final commands to the hardware interface
+  Base::writeJointEffortCmds();
   return controller_interface::return_type::OK;
 }
 
+void CartesianAdaptiveImpedanceController::updateMinimizationVariables()
+{
+  m_external_forces.insert(m_external_forces.begin(),ext_force);
+  m_external_forces.pop_back();
+
+  ctrl::Vector3D des_force = ImpedanceBase::m_target_wrench.head<3>();
+  m_desired_forces.insert(m_desired_forces.begin(),des_force);
+  m_desired_forces.pop_back();
+
+  ctrl::Matrix3D des_stiff = ImpedanceBase::m_cartesian_stiffness.topLeftCorner<3,3>();
+  m_desired_stiffness.insert(m_desired_stiffness.begin(),des_stiff);
+  m_desired_stiffness.pop_back();
+}
+
+void CartesianAdaptiveImpedanceController::computeDesiredStiffness(ctrl::Vector3D& ext_force)
+{
+  updateMinimizationVariables();
+  
+}
 // ctrl::Vector6D CartesianAdaptiveImpedanceController::computeComplianceError()
 // {
 //   ctrl::Vector6D tmp;
