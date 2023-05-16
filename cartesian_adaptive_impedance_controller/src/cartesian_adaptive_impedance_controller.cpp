@@ -126,14 +126,14 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   m_force_max(2) = get_node()->get_parameter("force_max.trans_z").as_double();
 
   // Set Q matrix
-  m_Q_matrix(0, 0) = get_node()->get_parameter("Q").as_double();
-  m_Q_matrix(1, 1) = get_node()->get_parameter("Q").as_double();
-  m_Q_matrix(2, 2) = get_node()->get_parameter("Q").as_double();
+  m_Q_matrix(0) = get_node()->get_parameter("Q").as_double();
+  m_Q_matrix(1) = get_node()->get_parameter("Q").as_double();
+  m_Q_matrix(2) = get_node()->get_parameter("Q").as_double();
 
   // Set R matrix
-  m_R_matrix(0, 0) = get_node()->get_parameter("R").as_double();
-  m_R_matrix(1, 1) = get_node()->get_parameter("R").as_double();
-  m_R_matrix(2, 2) = get_node()->get_parameter("R").as_double();
+  m_R_matrix(0) = get_node()->get_parameter("R").as_double();
+  m_R_matrix(1) = get_node()->get_parameter("R").as_double();
+  m_R_matrix(2) = get_node()->get_parameter("R").as_double();
 
   return TYPE::SUCCESS;
 }
@@ -192,24 +192,68 @@ controller_interface::return_type CartesianAdaptiveImpedanceController::update(c
   return controller_interface::return_type::OK;
 }
 
-void CartesianAdaptiveImpedanceController::updateMinimizationVariables()
+// void CartesianAdaptiveImpedanceController::updateMinimizationVariables()
+// {
+//   m_external_forces.insert(m_external_forces.begin(),ext_force);
+//   m_external_forces.pop_back();
+
+//   ctrl::Vector3D des_force = ImpedanceBase::m_target_wrench.head<3>();
+//   m_desired_forces.insert(m_desired_forces.begin(),des_force);
+//   m_desired_forces.pop_back();
+
+//   ctrl::Matrix3D des_stiff = ImpedanceBase::m_cartesian_stiffness.topLeftCorner<3,3>();
+//   m_desired_stiffness.insert(m_desired_stiffness.begin(),des_stiff);
+//   m_desired_stiffness.pop_back();
+// }
+
+void CartesianAdaptiveImpedanceController::computeDesiredStiffness()
 {
-  m_external_forces.insert(m_external_forces.begin(),ext_force);
-  m_external_forces.pop_back();
+  // updateMinimizationVariables();
 
-  ctrl::Vector3D des_force = ImpedanceBase::m_target_wrench.head<3>();
-  m_desired_forces.insert(m_desired_forces.begin(),des_force);
-  m_desired_forces.pop_back();
+  USING_NAMESPACE_QPOASES
+  /* Setup data of first QP. */
+  real_t H[3*3] = 
+  {
+    m_R_matrix(0) + m_Q_matrix(0) * Base::m_joint_positions(0), 0.0, 0.0,
+    0.0, m_R_matrix(1) + m_Q_matrix(1) * Base::m_joint_positions(1), 0.0,
+    0.0, 0.0, m_R_matrix(2) + m_Q_matrix(2) * Base::m_joint_positions(2)
+  };
+  real_t A[3*3] = 
+  {
+    Base::m_joint_positions(0), 0.0, 0.0,
+    0.0, Base::m_joint_positions(1), 0.0,
+    0.0, 0.0, Base::m_joint_positions(2)
+  };
+  real_t g[3] = {
+    - 2 * m_stiffness_min(0) * m_R_matrix(0) - 2 * ImpedanceBase::m_target_wrench(0) * Base::m_joint_positions(0) * m_Q_matrix(0)
+      + 2 * m_Q_matrix(0) * ImpedanceBase::m_cartesian_damping(0,0) * Base::m_joint_velocities(0) * Base::m_joint_positions(0),
+    - 2 * m_stiffness_min(1) * m_R_matrix(1) - 2 * ImpedanceBase::m_target_wrench(1) * Base::m_joint_positions(1) * m_Q_matrix(1)
+      + 2 * m_Q_matrix(1) * ImpedanceBase::m_cartesian_damping(1,1) * Base::m_joint_velocities(1) * Base::m_joint_positions(1),
+    - 2 * m_stiffness_min(2) * m_R_matrix(2) - 2 * ImpedanceBase::m_target_wrench(2) * Base::m_joint_positions(2) * m_Q_matrix(2)
+      + 2 * m_Q_matrix(2) * ImpedanceBase::m_cartesian_damping(2,2) * Base::m_joint_velocities(2) * Base::m_joint_positions(2)
+  };
+  real_t lb[3] = { m_stiffness_min(0), m_stiffness_min(1), m_stiffness_min(2)};
+  real_t ub[3] = { m_stiffness_max(0), m_stiffness_max(1), m_stiffness_max(2)};
+  real_t lbA[3] = { 0.0, 0.0, 0.0 };
+  real_t ubA[3] = { 
+    m_force_max(0) -  ImpedanceBase::m_cartesian_damping(0,0) * Base::m_joint_velocities(0),
+    m_force_max(1) -  ImpedanceBase::m_cartesian_damping(1,1) * Base::m_joint_velocities(1),
+    m_force_max(2) -  ImpedanceBase::m_cartesian_damping(2,2) * Base::m_joint_velocities(2)
+  };
 
-  ctrl::Matrix3D des_stiff = ImpedanceBase::m_cartesian_stiffness.topLeftCorner<3,3>();
-  m_desired_stiffness.insert(m_desired_stiffness.begin(),des_stiff);
-  m_desired_stiffness.pop_back();
-}
+  /* Setting up QProblem object. */
+  QProblem min_problem( 3, 3 );
 
-void CartesianAdaptiveImpedanceController::computeDesiredStiffness(ctrl::Vector3D& ext_force)
-{
-  updateMinimizationVariables();
-  
+  /* Solve QP. */
+  int nWSR = 10;
+  min_problem.init( H,g,A,lb,ub,lbA,ubA, nWSR );
+
+  real_t xOpt[3];
+  min_problem.getPrimalSolution( xOpt );
+
+  ImpedanceBase::m_cartesian_stiffness(0,0) = xOpt[0];
+  ImpedanceBase::m_cartesian_stiffness(1,1) = xOpt[1];
+  ImpedanceBase::m_cartesian_stiffness(2,2) = xOpt[2];
 }
 // ctrl::Vector6D CartesianAdaptiveImpedanceController::computeComplianceError()
 // {

@@ -87,6 +87,10 @@ class CartesianAdaptiveImpedanceController
 
     controller_interface::return_type update(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
+    // void updateMinimizationVariables();
+
+    void computeDesiredStiffness();
+
     using Base = effort_controller_base::EffortControllerBase;
     using ImpedanceBase = cartesian_impedance_controller::CartesianImpedanceController;
 
@@ -98,10 +102,10 @@ class CartesianAdaptiveImpedanceController
      */
     ctrl::Vector6D        computeComplianceError();
 
-    ctrl::Matrix3D        m_stiffness_min;
-    ctrl::Matrix3D        m_stiffness_max;
-    ctrl::Matrix3D        m_Q_matrix;
-    ctrl::Matrix3D        m_R_matrix;
+    ctrl::Vector3D        m_stiffness_min;
+    ctrl::Vector3D        m_stiffness_max;
+    ctrl::Vector3D        m_Q_matrix;
+    ctrl::Vector3D        m_R_matrix;
     ctrl::Vector3D        m_force_max;
 
     size_t                m_window_length;
