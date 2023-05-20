@@ -112,13 +112,14 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-  // Get delta tau maximum
-  m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
-  if (m_robot_description.empty())
-  {
-    m_delta_tau_max = 1; // max delta of 1 Nm
-  }
-
+  // // Get delta tau maximum
+  // m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
+  // if (m_delta_tau_max.empty())
+  // {
+  //   m_delta_tau_max = 1; // max delta of 1 Nm
+  // }
+  
+  m_delta_tau_max = 1; // max delta of 1 Nm
   // Get kinematics specific configuration
   urdf::Model robot_model;
   KDL::Tree   robot_tree;
@@ -169,7 +170,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     RCLCPP_ERROR(get_node()->get_logger(), "joints array is empty");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
-
+  
   // Initialize joint number
   m_joint_number = m_joint_names.size();
 
@@ -215,9 +216,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain,grav));
   m_iterations = get_node()->get_parameter("solver.iterations").as_int();
   m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
-
-  // Initialize Effort pd controllers
-  m_spatial_controller.init(get_node());
+  RCLCPP_INFO(get_node()->get_logger(), "Finished initializing kinematics solvers");
+  
 
   // Check command interfaces.
   // We support effort.
@@ -227,6 +227,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     RCLCPP_ERROR(get_node()->get_logger(), "No command_interfaces specified");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
+  RCLCPP_INFO(get_node()->get_logger(), "Finished on_configure");
   for (const auto& type : m_cmd_interface_types)
   {
     if (type != hardware_interface::HW_IF_EFFORT)
@@ -238,7 +239,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
     }
   }
-
+  
   m_configured = true;
 
   // Initialize effords to null
@@ -247,7 +248,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   // Initialize joint state
   m_joint_positions.resize(m_joint_number);
   m_joint_velocities.resize(m_joint_number);
-  writeJointEffortCmds();
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -318,6 +318,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
                  m_joint_number,
                  hardware_interface::HW_IF_VELOCITY,
                  m_joint_state_vel_handles.size());
+
+    writeJointEffortCmds();
     return CallbackReturn::ERROR;
   }
 
@@ -359,6 +361,7 @@ void EffortControllerBase::writeJointEffortCmds()
       }
     }
   }
+  RCLCPP_INFO(get_node()->get_logger(), "Finished on_configure");
 }
 
 void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND& tau)

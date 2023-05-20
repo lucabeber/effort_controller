@@ -270,15 +270,21 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
   // Torque calculation for task space
   tau_task = jac.transpose() * (m_cartesian_stiffness * motion_error + m_cartesian_damping * (jac * q_dot));
 
-  // Torque calculation for null space
-  tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number,Base::m_joint_number) - jac * jac_pseudo_inverse)
-    * (m_null_space_stiffness * (- q + q_null_space) - m_null_space_damping * q_dot);
+  // // Torque calculation for null space
+  // tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number,Base::m_joint_number) - jac * jac_pseudo_inverse)
+  //   * (m_null_space_stiffness * (- q + q_null_space) - m_null_space_damping * q_dot);
 
-  // Torque calculation for external wrench
-  tau_ext = jac.transpose() * m_target_wrench;
+  // // Torque calculation for external wrench
+  // tau_ext = jac.transpose() * m_target_wrench;
 
-  // Final torque calculation
-  return - tau_task + tau_null + tau_ext;
+  // // Final torque calculation
+  // return - tau_task + tau_null + tau_ext;
+
+  KDL::JntArray gravity, coriolis;
+  Base::m_dyn_solver->JntToGravity(Base::m_joint_positions,gravity);
+  Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions, Base::m_joint_velocities,coriolis);
+
+  return - tau_task + gravity.data + coriolis.data;
 }  
 // void CartesianImpedanceController::setFtSensorReferenceFrame(const std::string& new_ref)
 // {
