@@ -63,7 +63,7 @@ namespace franka_coppelia_hw
       return hardware_interface::CallbackReturn::ERROR;
     }
     // initializing variable to save the current joint state
-    current_joint_state.name = {"joint0", "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
+    current_joint_state.name = {"panda_joint0", "panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6"};
     current_joint_state.position = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     current_joint_state.velocity = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     current_joint_state.effort = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};

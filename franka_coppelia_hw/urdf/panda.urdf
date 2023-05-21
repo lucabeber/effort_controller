@@ -7,37 +7,37 @@
           <param name="example_param_hw_stop_duration_sec">3.0</param>
           <param name="example_param_hw_slowdown">100</param>
         </hardware>
-        <joint name="joint0">
+        <joint name="panda_joint0">
           <command_interface name="effort"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-        <joint name="joint1">
+        <joint name="panda_joint1">
           <command_interface name="effort"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-        <joint name="joint2">
+        <joint name="panda_joint2">
           <command_interface name="effort"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-        <joint name="joint3">
+        <joint name="panda_joint3">
           <command_interface name="effort"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-        <joint name="joint4">
+        <joint name="panda_joint4">
           <command_interface name="effort"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-        <joint name="joint5">
+        <joint name="panda_joint5">
           <command_interface name="effort"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
         </joint>
-        <joint name="joint6">
+        <joint name="panda_joint6">
           <command_interface name="effort"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>
@@ -61,7 +61,7 @@
             </material>
         </visual>
     </link>
-    <joint name="joint0" type="revolute">
+    <joint name="panda_joint0" type="revolute">
         <axis xyz="0 0 1" />
         <limit velocity="2.1749997138977" upper="2.8972465991974" lower="-2.8972465991974" effort="87.0" />
         <parent link="robot_base" />
@@ -108,7 +108,7 @@
             </material>
         </visual>
     </link>
-    <joint name="joint1" type="revolute">
+    <joint name="panda_joint1" type="revolute">
         <axis xyz="0 0 1" />
         <limit velocity="2.1749997138977" upper="1.7627825737" lower="-1.7627825737" effort="87.0" />
         <parent link="link2resp" />
@@ -143,7 +143,7 @@
             </material>
         </visual>
     </link>
-    <joint name="joint2" type="revolute">
+    <joint name="panda_joint2" type="revolute">
         <axis xyz="0 0 1" />
         <limit velocity="2.1749997138977" upper="2.8972465991974" lower="-2.8972465991974" effort="87.0" />
         <parent link="link3resp" />
@@ -199,7 +199,7 @@
             </material>
         </visual>
     </link>
-    <joint name="joint3" type="revolute">
+    <joint name="panda_joint3" type="revolute">
         <axis xyz="0 0 1" />
         <limit velocity="2.1749997138977" upper="0.0" lower="-3.0019662380219" effort="87.0" />
         <parent link="link4resp" />
@@ -267,7 +267,7 @@
             </material>
         </visual>
     </link>
-    <joint name="joint4" type="revolute">
+    <joint name="panda_joint4" type="revolute">
         <axis xyz="0 0 1" />
         <limit velocity="2.610000371933" upper="2.8972465991974" lower="-2.8972465991974" effort="12.0" />
         <parent link="link5resp" />
@@ -353,7 +353,7 @@
             </material>
         </visual>
     </link>
-    <joint name="joint5" type="revolute">
+    <joint name="panda_joint5" type="revolute">
         <axis xyz="0 0 1" />
         <limit velocity="2.610000371933" upper="3.7524577584118" lower="-0.017453292384744" effort="12.0" />
         <parent link="link6resp" />
@@ -481,7 +481,7 @@
             </material>
         </visual>
     </link>
-    <joint name="joint6" type="revolute">
+    <joint name="panda_joint6" type="revolute">
         <axis xyz="0 0 1" />
         <limit velocity="2.610000371933" upper="2.8972465991974" lower="-2.8972465991974" effort="12.0" />
         <parent link="link7resp" />

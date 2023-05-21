@@ -51,7 +51,7 @@ install(
 )
 
 install(
-  DIRECTORY bringup/launch bringup/config urdf meshes config
+  DIRECTORY bringup/launch bringup/config urdf meshes config rviz
   DESTINATION share/franka_coppelia_hw
 )
 
