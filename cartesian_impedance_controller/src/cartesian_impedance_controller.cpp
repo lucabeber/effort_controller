@@ -122,7 +122,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   m_null_space_damping = 2 * 0.707 * sqrt(m_null_space_stiffness);
 
   // Make sure sensor wrenches are interpreted correctly
-  setFtSensorReferenceFrame(Base::m_end_effector_link);
+  //setFtSensorReferenceFrame(Base::m_end_effector_link);
 
   m_target_wrench_subscriber = get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
     get_node()->get_name() + std::string("/target_wrench"),
