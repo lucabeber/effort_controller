@@ -51,14 +51,17 @@ def generate_launch_description():
         ]
     )
 
-    # joint_state_publisher = Node(
-    #     package='joint_state_publisher',
-    #     executable='joint_state_publisher',
-    #     name='joint_state_publisher',
-    #     parameters=[
-    #             {'source_list': ['franka/joint_states', 'panda_gripper/joint_states'],
-    #              'rate': 30}],
-    # )
+    control_node = Node(
+        package="controller_manager",
+        executable="ros2_control_node",
+        parameters=[{"robot_description": open(urdf_path, 'r').read()}, robot_controllers],
+        #prefix="screen -d -m gdb -command=/home/scherzin/.ros/my_debug_log --ex run --args",
+        output="both",
+        remappings=[
+            ('motion_control_handle/target_frame', 'target_frame'),
+            ('cartesian_motion_controller/target_frame', 'target_frame'),
+            ]
+    )
 
     joint_state_broadcaster_spawner = Node(
         package="controller_manager",
@@ -94,8 +97,8 @@ def generate_launch_description():
 
     # Nodes to start
     nodes = [
-        control_node,
         robot_state_publisher,
+        control_node,
         # joint_state_broadcaster_spawner,
         cartesian_impedance_controller_spawner,
         rviz

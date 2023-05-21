@@ -44,13 +44,13 @@ cartesian_impedance_controller:
       - position
       - velocity
     joints:
-      - joint0
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
+      - panda_joint0
+      - panda_joint1
+      - panda_joint2
+      - panda_joint3
+      - panda_joint4
+      - panda_joint5
+      - panda_joint6
     delta_tau_max: 1.0 # Nm
     stiffness:  # w.r.t. compliance_ref_link coordinates
         trans_x: 500.0
@@ -59,4 +59,3 @@ cartesian_impedance_controller:
         rot_x: 20.0
         rot_y: 20.0
         rot_z: 20.0
-
