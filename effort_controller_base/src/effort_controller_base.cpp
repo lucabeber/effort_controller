@@ -227,7 +227,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     RCLCPP_ERROR(get_node()->get_logger(), "No command_interfaces specified");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
-  RCLCPP_INFO(get_node()->get_logger(), "Finished on_configure");
   for (const auto& type : m_cmd_interface_types)
   {
     if (type != hardware_interface::HW_IF_EFFORT)
@@ -249,6 +248,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   m_joint_positions.resize(m_joint_number);
   m_joint_velocities.resize(m_joint_number);
 
+  RCLCPP_INFO(get_node()->get_logger(), "Finished Base on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -275,7 +275,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   {
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
-
+  RCLCPP_INFO(get_node()->get_logger(), "Getting interfaces");
   // Get command handles.
 
   if (!controller_interface::get_ordered_interfaces(command_interfaces_,
@@ -291,7 +291,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     return CallbackReturn::ERROR;
   }
 
-
+  RCLCPP_INFO(get_node()->get_logger(), "Finished getting command interfaces");
   // Get state handles.
   // Position
   if (!controller_interface::get_ordered_interfaces(state_interfaces_,
@@ -318,11 +318,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
                  m_joint_number,
                  hardware_interface::HW_IF_VELOCITY,
                  m_joint_state_vel_handles.size());
-
-    writeJointEffortCmds();
     return CallbackReturn::ERROR;
   }
 
+  RCLCPP_INFO(get_node()->get_logger(), "Finished getting state interfaces");
   // Copy joint state to internal simulation
   // if (!m_ik_solver->setStartState(m_joint_state_pos_handles))
   // {
@@ -332,10 +331,11 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   // m_ik_solver->updateKinematics();
 
   // Provide safe command buffers with starting where we are
-  computeJointEffortCmds(ctrl::VectorND::Zero(m_joint_number));
-  writeJointEffortCmds();
+  // computeJointEffortCmds(ctrl::VectorND::Zero(m_joint_number));
+  // writeJointEffortCmds();
 
   m_active = true;
+  RCLCPP_INFO(get_node()->get_logger(), "Finished Base on_activate");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -361,7 +361,6 @@ void EffortControllerBase::writeJointEffortCmds()
       }
     }
   }
-  RCLCPP_INFO(get_node()->get_logger(), "Finished on_configure");
 }
 
 void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND& tau)

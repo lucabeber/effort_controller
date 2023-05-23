@@ -144,8 +144,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   m_ft_sensor_wrench.setZero();
 
   // Update joint states
-  Base::updateJointStates();
-  
+  // Base::updateJointStates();
+  RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -173,6 +173,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   Base::computeJointEffortCmds(ctrl::Vector6D::Zero());
   Base::writeJointEffortCmds();
   Base::on_deactivate(previous_state);
+
+  RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_activate");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 

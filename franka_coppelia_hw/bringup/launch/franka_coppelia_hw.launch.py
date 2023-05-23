@@ -39,6 +39,7 @@ def generate_launch_description():
     # The actual simulation is a ROS2-control system interface.
     # Start that with the usual ROS2 controller manager mechanisms.
     urdf_path = os.path.join(description_package,"urdf","panda.urdf")
+    
     control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
@@ -49,18 +50,6 @@ def generate_launch_description():
             ('cartesian_impedance_controller/target_frame', 'target_frame'),
             ('cartesian_impedance_controller/target_wrench', 'target_wrench'),
         ]
-    )
-
-    control_node = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[{"robot_description": open(urdf_path, 'r').read()}, robot_controllers],
-        #prefix="screen -d -m gdb -command=/home/scherzin/.ros/my_debug_log --ex run --args",
-        output="both",
-        remappings=[
-            ('motion_control_handle/target_frame', 'target_frame'),
-            ('cartesian_motion_controller/target_frame', 'target_frame'),
-            ]
     )
 
     joint_state_broadcaster_spawner = Node(
@@ -97,10 +86,10 @@ def generate_launch_description():
 
     # Nodes to start
     nodes = [
-        robot_state_publisher,
         control_node,
-        # joint_state_broadcaster_spawner,
+        joint_state_broadcaster_spawner,
         cartesian_impedance_controller_spawner,
+        robot_state_publisher,
         rviz
     ]
 

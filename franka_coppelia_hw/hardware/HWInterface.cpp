@@ -24,6 +24,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+
 using namespace std;
 namespace franka_coppelia_hw
 {
@@ -36,9 +37,10 @@ namespace franka_coppelia_hw
     auto stateCB =
         [this](const sensor_msgs::msg::JointState::SharedPtr state) -> void
     {
-      for (int i = 0; i < 6; i++)
+      for (int i = 0; i < 7; i++)
       {
         current_joint_state.position[i] = state->position[i];
+        current_joint_state.velocity[i] = state->velocity[i];
       }
     };
     command_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>("/coppelia_set_joints", 0);
@@ -63,7 +65,7 @@ namespace franka_coppelia_hw
       return hardware_interface::CallbackReturn::ERROR;
     }
     // initializing variable to save the current joint state
-    current_joint_state.name = {"panda_joint0", "panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6"};
+    current_joint_state.name = {"panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"};
     current_joint_state.position = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     current_joint_state.velocity = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     current_joint_state.effort = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -86,7 +88,7 @@ namespace franka_coppelia_hw
 
     for (const hardware_interface::ComponentInfo &joint : info_.joints)
     {
-      // RRBotSystemPositionOnly has exactly one state and command interface on each joint
+      // RRBotSystemPositionOnly has exactly two states and command interface on each joint
       if (joint.command_interfaces.size() != 1)
       {
         RCLCPP_FATAL(
@@ -203,12 +205,12 @@ namespace franka_coppelia_hw
           rclcpp::get_logger("FrankaEffortHardware"), "%.1f seconds left...",
           hw_start_sec_ - i);
     }
-    for (uint i = 0; i < hw_pos_.size(); i++)
-    {
-      hw_commands_[i] = hw_pos_[i];
-    }
+    // for (uint i = 0; i < hw_pos_.size(); i++)
+    // {
+    //   hw_commands_[i] = hw_pos_[i];
+    // }
 
-    RCLCPP_INFO(rclcpp::get_logger("FrankaEffortHardware"), "Successfully activated!");
+    RCLCPP_INFO(rclcpp::get_logger("FrankaEffortHardware"), "HW Interface successfully activated!");
 
     return hardware_interface::CallbackReturn::SUCCESS;
   }
@@ -242,6 +244,9 @@ namespace franka_coppelia_hw
     {
       hw_pos_[i] = current_joint_state.position[i];
       hw_vel_[i] = current_joint_state.velocity[i];
+      // RCLCPP_INFO(rclcpp::get_logger("FrankaEffortHardware"), "Reading");
+      // RCLCPP_INFO_STREAM(rclcpp::get_logger("FrankaEffortHardware"), "pos " << current_joint_state.position[i]);
+      // RCLCPP_INFO_STREAM(rclcpp::get_logger("FrankaEffortHardware"), "vel " << current_joint_state.velocity[i]);
     }
     return hardware_interface::return_type::OK;
   }

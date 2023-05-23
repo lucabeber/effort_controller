@@ -1,6 +1,7 @@
 controller_manager:
   ros__parameters:
-    update_rate: 1000  # Hz
+    update_rate: 100  # Hz
+
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
@@ -44,13 +45,13 @@ cartesian_impedance_controller:
       - position
       - velocity
     joints:
-      - panda_joint0
       - panda_joint1
       - panda_joint2
       - panda_joint3
       - panda_joint4
       - panda_joint5
       - panda_joint6
+      - panda_joint7
     delta_tau_max: 1.0 # Nm
     stiffness:  # w.r.t. compliance_ref_link coordinates
         trans_x: 500.0
