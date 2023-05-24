@@ -140,9 +140,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
         3,
         std::bind(&CartesianImpedanceController::targetFrameCallback, this, std::placeholders::_1));
 
-  m_target_wrench.setZero();
-  m_ft_sensor_wrench.setZero();
-
   // Update joint states
   // Base::updateJointStates();
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
@@ -163,6 +160,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   // Set the target frame to the current frame
   m_target_frame = m_current_frame;
   
+  RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_activate");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -183,7 +181,7 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
 {
   // Update joint states
   Base::updateJointStates();
-
+  
   // Compute the torque to applay at the joints
   ctrl::VectorND tau_tot = computeTorque();
 
@@ -216,37 +214,27 @@ ctrl::Vector6D CartesianImpedanceController::computeForceError()
 
 ctrl::Vector6D CartesianImpedanceController::computeMotionError()
 {
-  // Redefine eigen vectors in kdl format
-  KDL::Frame target_frame_kdl, current_frame_kdl;
-
-  // Transformation from target -> current corresponds to error = target - current
-  KDL::Frame error_kdl;
-  error_kdl.M = m_target_frame.M * m_current_frame.M.Inverse();
-  error_kdl.p = m_target_frame.p - m_current_frame.p;
-
-  // Use Rodrigues Vector for a compact representation of orientation errors
-  // Only for angles within [0,Pi)
-  KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle    = error_kdl.M.GetRotAngle(rot_axis);   // rot_axis is normalized
-
-  rot_axis = rot_axis * angle;
-
-  // Reassign values
+  // Compute the cartesian error between the current and the target frame
   ctrl::Vector6D error;
-  error(0) = error_kdl.p.x();
-  error(1) = error_kdl.p.y();
-  error(2) = error_kdl.p.z();
-  error(3) = rot_axis(0);
-  error(4) = rot_axis(1);
-  error(5) = rot_axis(2);
+  
+  // Compute the difference between the two frames
+  KDL::Frame error_frame = m_target_frame.Inverse() * m_current_frame;
 
+  // Compute the error vector
+  error(0) = error_frame.p.x();
+  error(1) = error_frame.p.y();
+  error(2) = error_frame.p.z();
+  error(3) = error_frame.M.GetRot().x();
+  error(4) = error_frame.M.GetRot().y();
+  error(5) = error_frame.M.GetRot().z();
+  
   return error;
 }
 
 ctrl::VectorND CartesianImpedanceController::computeTorque()
 {
   // Find the desired joints positions
-  Base::computeNullSpace(m_target_frame);
+  //Base::computeNullSpace(m_target_frame);
 
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
@@ -257,20 +245,26 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
   // Compute the pseudo-inverse of the jacobian
   ctrl::MatrixND jac = Base::m_jacobian.data;
   ctrl::MatrixND jac_pseudo_inverse;
+  jac_pseudo_inverse.resize(jac.cols(), jac.rows());
+
   pseudoInverse(jac.transpose(), &jac_pseudo_inverse);
 
   // Redefine joints velocities in Eigen format
   ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
   ctrl::VectorND q_null_space = Base::m_simulated_joint_motion.data;
-  
+
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
   
   ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number), tau_ext(Base::m_joint_number);
 
   // Torque calculation for task space
-  tau_task = jac.transpose() * (m_cartesian_stiffness * motion_error + m_cartesian_damping * (jac * q_dot));
+  tau_task = jac.transpose() * (-m_cartesian_stiffness * motion_error - m_cartesian_damping * (jac * q_dot));
+
+  // Print the cartesian stiffness and damping
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "cartesian stiffness" << m_cartesian_stiffness);
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "cartesian damping" << m_cartesian_damping);
 
   // // Torque calculation for null space
   // tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number,Base::m_joint_number) - jac * jac_pseudo_inverse)
@@ -283,10 +277,15 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
   // return - tau_task + tau_null + tau_ext;
 
   KDL::JntArray gravity, coriolis;
+  gravity.resize(Base::m_joint_number);
+  coriolis.resize(Base::m_joint_number);
+
   Base::m_dyn_solver->JntToGravity(Base::m_joint_positions,gravity);
   Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions, Base::m_joint_velocities,coriolis);
-
-  return - tau_task + gravity.data + coriolis.data;
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau_task: " << tau_task);
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "gravity: " << gravity.data);
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "coriolis: " << coriolis.data);
+  return tau_task;
 }  
 // void CartesianImpedanceController::setFtSensorReferenceFrame(const std::string& new_ref)
 // {
@@ -335,7 +334,7 @@ void CartesianImpedanceController::targetFrameCallback(const geometry_msgs::msg:
         target->header.frame_id.c_str());
     return;
   }
-
+  
   m_target_frame = KDL::Frame(
       KDL::Rotation::Quaternion(
         target->pose.orientation.x,
@@ -346,6 +345,7 @@ void CartesianImpedanceController::targetFrameCallback(const geometry_msgs::msg:
         target->pose.position.x,
         target->pose.position.y,
         target->pose.position.z));
+  
 }
 // void CartesianImpedanceController::ftSensorWrenchCallback(const geometry_msgs::msg::WrenchStamped::SharedPtr wrench)
 // {

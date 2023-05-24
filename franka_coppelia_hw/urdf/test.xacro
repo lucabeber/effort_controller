@@ -5,32 +5,24 @@
     <ros2_control name="FrankaHardwareInterface" type="system">
       <hardware>
         <xacro:if value="${use_fake_hardware}">
-          <plugin>franka_coppelia_hw/FrankaEffortHardware</plugin>
-          <param name="example_param_hw_start_duration_sec">0</param>
-          <param name="example_param_hw_stop_duration_sec">3.0</param>
-          <param name="example_param_hw_slowdown">100</param>
+          <plugin>fake_components/GenericSystem</plugin>
           <param name="fake_sensor_commands">${fake_sensor_commands}</param>
           <param name="state_following_offset">0.0</param>
         </xacro:if>
         <xacro:unless value="${use_fake_hardware}">
           <plugin>franka_hardware/FrankaHardwareInterface</plugin>
-          
           <param name="robot_ip">${robot_ip}</param>
         </xacro:unless>
       </hardware>
 
       <xacro:macro name="configure_joint" params="joint_name initial_position initial_velocity initial_effort">
-        <joint name="${joint_name}">          
+        <joint name="${joint_name}">
+          <param name="initial_position">${initial_position}</param>
+          <param name="initial_velocity">${initial_velocity}</param>
+          <param name="initial_effort">${initial_effort}</param>
           <command_interface name="effort"/>
-          <state_interface name="position">
-            <param name="initial_position">${initial_position}</param>
-          </state_interface>
-          <state_interface name="velocity">
-            <param name="initial_velocity">${initial_velocity}</param>
-          </state_interface>
-          <state_interface name="effort">
-            <param name="initial_effort">${initial_effort}</param>
-          </state_interface>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
         </joint>
       </xacro:macro>
 

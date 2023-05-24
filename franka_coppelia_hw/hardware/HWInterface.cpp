@@ -84,6 +84,7 @@ namespace franka_coppelia_hw
     // END: This part here is for exemplary purposes - Please do not copy to your production code
     hw_pos_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
     hw_vel_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
+    hw_eff_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
     hw_commands_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
 
     for (const hardware_interface::ComponentInfo &joint : info_.joints)
@@ -174,6 +175,8 @@ namespace franka_coppelia_hw
           info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_pos_[i]));
       state_interfaces.emplace_back(hardware_interface::StateInterface(
           info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_vel_[i]));
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+          info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &hw_eff_[i]));
     }
 
     return state_interfaces;

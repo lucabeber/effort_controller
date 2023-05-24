@@ -28,7 +28,7 @@ def generate_launch_description():
         'franka_coppelia_hw'), 'urdf', 'panda_arm.urdf.xacro')
 
     robot_description = Command(
-        [FindExecutable(name='xacro'), ' ', franka_xacro_file, ' hand:=', 'true',
+        [FindExecutable(name='xacro'), ' ', franka_xacro_file, ' hand:=', 'false',
             ' robot_ip:=', 'xxx.yyy.zzz.www', ' use_fake_hardware:=', 'true',
             ' fake_sensor_commands:=', 'false'])
 
@@ -43,7 +43,7 @@ def generate_launch_description():
     control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[{"robot_description": open(urdf_path, 'r').read()} , robot_controllers],
+        parameters=[{"robot_description": robot_description} , robot_controllers],
         # prefix="screen -d -m gdb -command=/home/scherzin/.ros/my_debug_log --ex run --args",
         output="both",
         remappings=[
@@ -81,7 +81,7 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         arguments=['--display-config', rviz_file],
-        #parameters=[{"use_sim_time": use_sim_time}]
+        parameters=[{"use_sim_time": use_sim_time}]
     )
 
     # Nodes to start
