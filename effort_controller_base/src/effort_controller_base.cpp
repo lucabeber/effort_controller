@@ -259,6 +259,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   // Initialize joint state
   m_joint_positions.resize(m_joint_number);
   m_joint_velocities.resize(m_joint_number);
+  m_simulated_joint_motion.resize(m_joint_number);
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Base on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -401,7 +402,6 @@ void EffortControllerBase::computeNullSpace(const KDL::Frame& desired_pose)
     RCLCPP_ERROR(get_node()->get_logger(), "Could not find IK solution");
     return;
   }
-
 }
 
 ctrl::Vector6D EffortControllerBase::displayInBaseLink(const ctrl::Vector6D& vector, const std::string& from)

@@ -116,10 +116,13 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   m_cartesian_damping = tmp.asDiagonal();
 
   // Set nullspace stiffness
-  m_null_space_stiffness = 20;
+  m_null_space_stiffness = 10;
 
   // Set nullspace damping
   m_null_space_damping = 2 * 0.707 * sqrt(m_null_space_stiffness);
+
+  // Set the identity matrix with dimension of the joint space
+  m_identity = ctrl::MatrixND::Identity(m_joint_number, m_joint_number);
 
   // Make sure sensor wrenches are interpreted correctly
   //setFtSensorReferenceFrame(Base::m_end_effector_link);
@@ -140,8 +143,6 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
         3,
         std::bind(&CartesianImpedanceController::targetFrameCallback, this, std::placeholders::_1));
 
-  // Update joint states
-  // Base::updateJointStates();
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -172,7 +173,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   Base::writeJointEffortCmds();
   Base::on_deactivate(previous_state);
 
-  RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_activate");
+  RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_deactivate");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -218,23 +219,33 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError()
   ctrl::Vector6D error;
   
   // Compute the difference between the two frames
-  KDL::Frame error_frame = m_target_frame.Inverse() * m_current_frame;
+  KDL::Twist error_frame;
+
+  // Compute the error frame
+  error_frame.vel = m_current_frame.p - m_target_frame.p;
+  error_frame.rot = 0.5 * (m_target_frame.M.UnitX() * m_current_frame.M.UnitX() +
+                      m_target_frame.M.UnitY() * m_current_frame.M.UnitY() +
+                      m_target_frame.M.UnitZ() * m_current_frame.M.UnitZ());
 
   // Compute the error vector
-  error(0) = error_frame.p.x();
-  error(1) = error_frame.p.y();
-  error(2) = error_frame.p.z();
-  error(3) = error_frame.M.GetRot().x();
-  error(4) = error_frame.M.GetRot().y();
-  error(5) = error_frame.M.GetRot().z();
-  
+  error(0) = error_frame(0);
+  error(1) = error_frame(1);
+  error(2) = error_frame(2);
+  error(3) = error_frame(3);
+  error(4) = error_frame(4);
+  error(5) = error_frame(5);
+
+  // Print the target frame, the current frame and the error frame
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "target frame: " << m_target_frame.p.x() << " " << m_target_frame.p.y() << " " << m_target_frame.p.z() << " " << m_target_frame.M.GetRot().x() << " " << m_target_frame.M.GetRot().y() << " " << m_target_frame.M.GetRot().z());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "current frame: " << m_current_frame.p.x() << " " << m_current_frame.p.y() << " " << m_current_frame.p.z() << " " << m_current_frame.M.GetRot().x() << " " << m_current_frame.M.GetRot().y() << " " << m_current_frame.M.GetRot().z());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "error frame: " << error_frame(0) << " " << error_frame(1) << " " << error_frame(2) << " " << error_frame(3) << " " << error_frame(4) << " " << error_frame(5));
   return error;
 }
 
 ctrl::VectorND CartesianImpedanceController::computeTorque()
 {
   // Find the desired joints positions
-  //Base::computeNullSpace(m_target_frame);
+  Base::computeNullSpace(m_target_frame);
 
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
@@ -245,7 +256,6 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
   // Compute the pseudo-inverse of the jacobian
   ctrl::MatrixND jac = Base::m_jacobian.data;
   ctrl::MatrixND jac_pseudo_inverse;
-  jac_pseudo_inverse.resize(jac.cols(), jac.rows());
 
   pseudoInverse(jac.transpose(), &jac_pseudo_inverse);
 
@@ -260,19 +270,16 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
   ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number), tau_ext(Base::m_joint_number);
 
   // Torque calculation for task space
-  tau_task = jac.transpose() * (-m_cartesian_stiffness * motion_error - m_cartesian_damping * (jac * q_dot));
+  tau_task = jac.transpose() * ( - m_cartesian_stiffness * motion_error - m_cartesian_damping * (jac * q_dot));
 
-  // Print the cartesian stiffness and damping
-  RCLCPP_INFO_STREAM(get_node()->get_logger(), "cartesian stiffness" << m_cartesian_stiffness);
-  RCLCPP_INFO_STREAM(get_node()->get_logger(), "cartesian damping" << m_cartesian_damping);
-
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "q_null_space: " << q_null_space-q);
   // // Torque calculation for null space
-  // tau_null = (ctrl::MatrixND::Identity(Base::m_joint_number,Base::m_joint_number) - jac * jac_pseudo_inverse)
-  //   * (m_null_space_stiffness * (- q + q_null_space) - m_null_space_damping * q_dot);
-
+  tau_null = (m_identity - jac.transpose() * jac_pseudo_inverse)
+    * (m_null_space_stiffness * (- q + q_null_space) - m_null_space_damping * q_dot);
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau_null: " << tau_null);
   // // Torque calculation for external wrench
   // tau_ext = jac.transpose() * m_target_wrench;
-
+  
   // // Final torque calculation
   // return - tau_task + tau_null + tau_ext;
 
@@ -283,9 +290,9 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
   Base::m_dyn_solver->JntToGravity(Base::m_joint_positions,gravity);
   Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions, Base::m_joint_velocities,coriolis);
   RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau_task: " << tau_task);
-  RCLCPP_INFO_STREAM(get_node()->get_logger(), "gravity: " << gravity.data);
-  RCLCPP_INFO_STREAM(get_node()->get_logger(), "coriolis: " << coriolis.data);
-  return tau_task;
+  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "gravity: " << gravity.data);
+  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "coriolis: " << coriolis.data);
+  return tau_task + tau_null;
 }  
 // void CartesianImpedanceController::setFtSensorReferenceFrame(const std::string& new_ref)
 // {
