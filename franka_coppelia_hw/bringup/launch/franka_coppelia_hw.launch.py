@@ -51,24 +51,17 @@ def generate_launch_description():
         ]
     )
 
-    control_node = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[{"robot_description": open(urdf_path, 'r').read()}, robot_controllers],
-        #prefix="screen -d -m gdb -command=/home/scherzin/.ros/my_debug_log --ex run --args",
-        output="both",
-        remappings=[
-            ('motion_control_handle/target_frame', 'target_frame'),
-            ('cartesian_motion_controller/target_frame', 'target_frame'),
-            ]
-    )
-
-    joint_state_broadcaster_spawner = Node(
-        package="controller_manager",
-        executable=spawner,
-        arguments=["joint_state_broadcaster", "-c", "/controller_manager"],
-        parameters=[{"use_sim_time": use_sim_time}]
-    )
+    # control_node = Node(
+    #     package="controller_manager",
+    #     executable="ros2_control_node",
+    #     parameters=[{"robot_description": open(urdf_path, 'r').read()}, robot_controllers],
+    #     #prefix="screen -d -m gdb -command=/home/scherzin/.ros/my_debug_log --ex run --args",
+    #     output="both",
+    #     remappings=[
+    #         ('motion_control_handle/target_frame', 'target_frame'),
+    #         ('cartesian_motion_controller/target_frame', 'target_frame'),
+    #         ]
+    # )
 
     cartesian_impedance_controller_spawner = Node(
         package="controller_manager",
@@ -82,8 +75,8 @@ def generate_launch_description():
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
-        output="both",
-        parameters=[{'robot_description': robot_description}],
+        #output="both",
+        parameters=[{'robot_description': {"robot_description": open(urdf_path, 'r').read()}}],
     )
 
     # Visualization
@@ -97,10 +90,12 @@ def generate_launch_description():
 
     # Nodes to start
     nodes = [
-        robot_state_publisher,
+        #
         control_node,
+        robot_state_publisher,
+
         # joint_state_broadcaster_spawner,
-        cartesian_impedance_controller_spawner,
+        # cartesian_impedance_controller_spawner,
         rviz
     ]
 
