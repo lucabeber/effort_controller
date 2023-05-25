@@ -49,6 +49,7 @@ def generate_launch_description():
         remappings=[
             ('cartesian_impedance_controller/target_frame', 'target_frame'),
             ('cartesian_impedance_controller/target_wrench', 'target_wrench'),
+            ('motion_control_handle/target_frame', 'target_frame'),
         ]
     )
 
@@ -66,13 +67,19 @@ def generate_launch_description():
                    "-c", "/controller_manager"],
         parameters=[{"use_sim_time": use_sim_time}]
     )
+    motion_control_handle_spawner = Node(
+        package="controller_manager",
+        executable=spawner,
+        arguments=["motion_control_handle", "-c", "/controller_manager"],
+        parameters=[{"use_sim_time": use_sim_time}]
+    )
 
     # TF tree
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         #output="both",
-        parameters=[{'robot_description': {"robot_description": open(urdf_path, 'r').read()}}],
+        parameters=[{"robot_description": robot_description}],
     )
 
     # Visualization
@@ -84,11 +91,15 @@ def generate_launch_description():
         parameters=[{"use_sim_time": use_sim_time}]
     )
 
+
+
+
     # Nodes to start
     nodes = [
         control_node,
         joint_state_broadcaster_spawner,
         cartesian_impedance_controller_spawner,
+        motion_control_handle_spawner,
         robot_state_publisher,
         rviz
     ]

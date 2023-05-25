@@ -151,12 +151,12 @@ namespace franka_coppelia_hw
           rclcpp::get_logger("FrankaEffortHardware"), "%.1f seconds left...",
           hw_start_sec_ - i);
     }
-    float initial_conf[]={0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+    float initial_conf[]={0.0,2.0,0.0,-90.0*3.14159/180.0,0.0,90.0*3.14159/180.0,0.0};
     for (uint i = 0; i < hw_pos_.size(); i++)
     {
       hw_pos_[i] = initial_conf[i];
-      hw_vel_[i] = initial_conf[i];
-      hw_commands_[i] = initial_conf[i];
+      hw_vel_[i] = 0.0;
+      hw_commands_[i] = 0.0;
     }
 
     RCLCPP_INFO(rclcpp::get_logger("FrankaEffortHardware"), "Successfully configured!");
