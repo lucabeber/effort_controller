@@ -125,6 +125,8 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
     KDL::JntArray         m_null_space;
     KDL::Frame            m_current_frame;
 
+    ctrl::MatrixND        m_identity;
+
 
     /**
      * Allow users to choose whether to specify their target wrenches in the

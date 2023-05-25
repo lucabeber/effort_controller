@@ -203,11 +203,13 @@ class EffortControllerBase : public controller_interface::ControllerInterface
 
   private:
     std::vector<std::string> m_cmd_interface_types;
+    std::vector<std::string> m_state_interface_types;
     std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>> m_joint_cmd_eff_handles;
 
     std::vector<std::string>                          m_joint_names;
     SpatialPDController                               m_spatial_controller;
     ctrl::VectorND                                    m_efforts;
+    std::string                                       m_controller_name;
     
 
     // Against multi initialization in multi inheritance scenarios
