@@ -253,7 +253,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
   //RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau_task: " << tau_task);
   // RCLCPP_INFO_STREAM(get_node()->get_logger(), "gravity: " << gravity.data);
   // RCLCPP_INFO_STREAM(get_node()->get_logger(), "coriolis: " << coriolis.data);
-  return tau_task + tau_null;
+  return tau_task;
 }  
 // void CartesianImpedanceController::setFtSensorReferenceFrame(const std::string& new_ref)
 // {
