@@ -21,10 +21,13 @@ controller_interface::InterfaceConfiguration EffortControllerBase::command_inter
 {
   controller_interface::InterfaceConfiguration conf;
   conf.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-  conf.names.reserve(m_joint_names.size());
-  for (const auto & joint_name : m_joint_names)
+  conf.names.reserve(m_joint_names.size() * m_cmd_interface_types.size());
+  for (const auto & type : m_cmd_interface_types)
+  {
+    for (const auto & joint_name : m_joint_names)
     {
-      conf.names.push_back(joint_name + "/effort");
+      conf.names.push_back(joint_name + std::string("/").append(type));
+    }
   }
   return conf;
 }
@@ -56,6 +59,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     auto_declare<std::vector<std::string>>("command_interfaces", std::vector<std::string>());
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
+    auto_declare<bool>("kuka", false);
     m_initialized = true;
   }
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -212,6 +216,13 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     RCLCPP_ERROR(get_node()->get_logger(), "No state_interfaces specified");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
   }
+  // Check if kuka is been used 
+  m_kuka = get_node()->get_parameter("kuka").as_bool();
+  if (m_kuka == true)
+  {
+    RCLCPP_WARN(get_node()->get_logger(), "Using Kuka, the position will be overwritten at each control cycle to make the robot behave as in gravity compensation mode"); 
+    m_cmd_interface_types.push_back(hardware_interface::HW_IF_POSITION);
+  }
   m_configured = true;
 
   // Initialize effords to null
@@ -250,8 +261,25 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
   RCLCPP_INFO(get_node()->get_logger(), "Getting interfaces");
-  // Get command handles.
 
+  // Get command handles.
+  // Position 
+  if ( m_kuka == true )
+  {
+    if (!controller_interface::get_ordered_interfaces(command_interfaces_,
+                                                    m_joint_names,
+                                                    hardware_interface::HW_IF_POSITION,
+                                                    m_joint_cmd_pos_handles))
+    {
+      RCLCPP_ERROR(get_node()->get_logger(),
+                    "Expected %zu '%s' command interfaces, got %zu.",
+                    m_joint_number,
+                    hardware_interface::HW_IF_POSITION,
+                    m_joint_cmd_pos_handles.size());
+      return CallbackReturn::ERROR;
+    }
+  }
+  // Effort
   if (!controller_interface::get_ordered_interfaces(command_interfaces_,
                                                     m_joint_names,
                                                     hardware_interface::HW_IF_EFFORT,
@@ -335,6 +363,14 @@ void EffortControllerBase::writeJointEffortCmds()
         }
         m_joint_cmd_eff_handles[i].get().set_value(m_efforts[i]);
       }
+    }
+  }
+
+  if (m_kuka == true)
+  {
+    for (size_t i = 0; i < m_joint_number; ++i)
+    {
+      m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
     }
   }
 }
