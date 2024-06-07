@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>gravity_compensation</name>
+  <version>0.0.0</version>
+  <description>The gravity_compensation package</description>
+  <maintainer email="scherzin@fzi.de">scherzin</maintainer>
+  <license>BSD</license>
+  <url type="repository">https://github.com/fzi-forschungszentrum-informatik/effort_controllers</url> 
+  <author email="scherzin@fzi.de">Stefan Scherzinger</author> 
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>effort_controller_base</depend>
+  <depend>controller_interface</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <controller_interface plugin="${prefix}/gravity_compensation_plugin.xml"/>
+  </export>
+</package>

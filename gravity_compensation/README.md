@@ -1,0 +1,54 @@
+# Catesian Impedance Controller
+
+This controller implements a catesian impedance controller which take a desired pose and a desired force in the cartesian frame.
+
+
+
+
+
+## Example Configuration
+Below is an example `controller_manager.yaml` for a controller specific configuration.
+```yaml
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    gravity_compensation:
+      type: gravity_compensation/GravityCompensation
+
+    # More controller instances here
+    # ...
+
+gravity_compensation:
+  ros__parameters:
+    end_effector_link: "tool0"
+    robot_base_link: "base_link"
+    ft_sensor_ref_link: "sensor_link"
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
+      
+    command_interfaces:
+      - effort
+
+    solver:
+        error_scale: 0.5
+
+    stiffness:
+        trans_x: 500
+        trans_y: 500
+        trans_z: 500
+        rot_x: 50
+        rot_y: 50
+        rot_z: 50
+
+
+# More controller specifications here
+# ...
+
+```
+
