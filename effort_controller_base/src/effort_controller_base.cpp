@@ -370,7 +370,7 @@ void EffortControllerBase::writeJointEffortCmds()
   {
     for (size_t i = 0; i < m_joint_number; ++i)
     {
-      m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
+      m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i)) + 0.01;
       // Print the commanded value
     } 
   }
