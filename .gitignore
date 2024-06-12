@@ -1,3 +1,4 @@
 /effort_controller_base/.vscode
 /cartesian_impedance_controller/.vscode
 /cartesian_adaptive_impedance_controller/.vscode
+.vscode/settings.json

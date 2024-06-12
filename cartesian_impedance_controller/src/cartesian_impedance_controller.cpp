@@ -292,7 +292,7 @@ void CartesianImpedanceController::targetWrenchCallback(const geometry_msgs::msg
 
 void CartesianImpedanceController::targetFrameCallback(const geometry_msgs::msg::PoseStamped::SharedPtr target)
 {
-  if (target->header.frame_id != Base::m_robot_base_link)
+  if (target->header.frame_id != "lbr/link_0")//!= Base::m_robot_base_link)
   {
     auto& clock = *get_node()->get_clock();
     RCLCPP_WARN_THROTTLE(get_node()->get_logger(),
