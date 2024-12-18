@@ -148,6 +148,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
 
     // Dynamic parameters
     std::string m_end_effector_link;
+    std::string m_compliance_ref_link;
     std::string m_robot_base_link;
     int m_iterations;
 
