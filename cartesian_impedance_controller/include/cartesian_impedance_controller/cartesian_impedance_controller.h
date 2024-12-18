@@ -59,16 +59,6 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
     double                  m_null_space_damping; 
     ctrl::Vector6D          m_target_wrench;
 
-  protected:
-    /**
-     * @brief Compute the net force of target wrench and measured sensor wrench
-     *
-     * @return The remaining error wrench, given in robot base frame
-     */
-    ctrl::Vector6D        computeForceError();
-    std::string           m_new_ft_sensor_ref;
-    void setFtSensorReferenceFrame(const std::string& new_ref);
-
   private:
     ctrl::Vector6D        compensateGravity();
 
@@ -87,8 +77,12 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
     KDL::Frame            m_current_frame;
 
     ctrl::MatrixND        m_identity;
+    ctrl::VectorND        m_q_starting_pose; 
+    ctrl::VectorND        m_tau_old;
 
-
+    ctrl::Vector3D        m_old_rot_error;
+    ctrl::VectorND        m_old_vel_error;
+    double const m_alpha = 0.3;
     /**
      * Allow users to choose whether to specify their target wrenches in the
      * end-effector frame (= True) or the base frame (= False). The first one
@@ -96,7 +90,6 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
      * intuitive for tele-manipulation.
      */
     bool m_hand_frame_control;
-
 };
 
 }

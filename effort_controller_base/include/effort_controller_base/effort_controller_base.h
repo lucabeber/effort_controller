@@ -2,8 +2,6 @@
 #define EFFORT_CONTROLLER_BASE_H_INCLUDED
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include <effort_controller_base/IKSolver.h>
-#include <effort_controller_base/SpatialPDController.h>
 #include <effort_controller_base/Utility.h>
 #include <controller_interface/controller_interface.hpp>
 #include <functional>
@@ -15,6 +13,13 @@
 #include <kdl/chainiksolverpos_nr_jl.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 #include <kdl/solveri.hpp>
+#include <kdl/chain.hpp>
+#include <kdl/chaindynparam.hpp>
+#include <kdl/chainfksolverpos_recursive.hpp>
+#include <kdl/chainfksolvervel_recursive.hpp>
+#include <kdl/chainjnttojacsolver.hpp>
+#include <kdl/frames.hpp>
+#include <kdl/jacobian.hpp>
 #include <memory>
 #include <pluginlib/class_loader.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -148,6 +153,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
 
     // Dynamic parameters
     std::string m_end_effector_link;
+    std::string m_compliance_ref_link;
     std::string m_robot_base_link;
     int m_iterations;
 
@@ -168,7 +174,6 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>> m_joint_cmd_eff_handles;
 
     std::vector<std::string>                          m_joint_names;
-    SpatialPDController                               m_spatial_controller;
     ctrl::VectorND                                    m_efforts;
     std::string                                       m_controller_name;
     

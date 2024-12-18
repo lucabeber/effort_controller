@@ -42,9 +42,6 @@ ament_export_dependencies(
 #--------------------------------------------------------------------------------
 add_library(${PROJECT_NAME} SHARED
   src/effort_controller_base.cpp
-  src/SpatialPDController.cpp
-  src/PDController.cpp
-  src/IKSolver.cpp
 )
 
 # Manual includes for local directories and non-ament packages
@@ -61,35 +58,9 @@ ament_target_dependencies(${PROJECT_NAME}
         ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
-
-add_library(ik_solvers SHARED
-  src/IKSolver.cpp
-  src/ForwardDynamicsSolver.cpp
-  src/JacobianTransposeSolver.cpp
-  src/DampedLeastSquaresSolver.cpp
-  src/SelectivelyDampedLeastSquaresSolver.cpp
-)
-
-target_include_directories(ik_solvers
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-# Prevent pluginlib from using boost
-target_compile_definitions(${PROJECT_NAME} PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
-
-ament_target_dependencies(ik_solvers
-        ${${PROJECT_NAME}_EXPORTED_TARGETS}
-        ${THIS_PACKAGE_INCLUDE_DEPENDS}
-)
-
-
 #--------------------------------------------------------------------------------
 # Install and export
 #--------------------------------------------------------------------------------
-
-pluginlib_export_plugin_description_file(effort_controller_base ik_solver_plugin.xml)
 
 # Note: The workflow as described here
 # https://docs.ros.org/en/foxy/How-To-Guides/Ament-CMake-Documentation.html#building-a-library
@@ -104,15 +75,6 @@ install(
   DESTINATION include
 )
 
-install(
-  TARGETS ${PROJECT_NAME} ik_solvers
-  #EXPORT my_targets_from_this_package
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  #INCLUDES DESTINATION include
-)
-
 
 # Note: For the target based workflow, they seem to be superfluous.
 # But since that doesn't work yet, I'll add them just in case.
@@ -120,9 +82,6 @@ install(
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 ament_export_include_directories(
   include
-)
-ament_export_libraries(
-  ${PROJECT_NAME} ik_solvers
 )
 
 ament_package()
