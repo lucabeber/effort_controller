@@ -90,9 +90,6 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
      * intuitive for tele-manipulation.
      */
     bool m_hand_frame_control;
-
-    bool m_with_postural_task;
-
 };
 
 }

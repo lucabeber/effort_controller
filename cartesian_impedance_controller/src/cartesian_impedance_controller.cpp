@@ -22,8 +22,7 @@ namespace cartesian_impedance_controller
 
     auto_declare<std::string>("ft_sensor_ref_link", "");
     auto_declare<bool>("hand_frame_control", true);
-    auto_declare<bool>("postural_task", true);
-    auto_declare<double>("nullspace_stiffness", 10);
+    auto_declare<double>("nullspace_stiffness", 0.0);
 
     constexpr double default_lin_stiff = 500.0;
     constexpr double default_rot_stiff = 50.0;
@@ -117,16 +116,6 @@ namespace cartesian_impedance_controller
             std::bind(&CartesianImpedanceController::targetFrameCallback, this,
                       std::placeholders::_1));
 
-    m_with_postural_task = get_node()->get_parameter("postural_task").as_bool();
-    if (m_with_postural_task)
-    {
-      RCLCPP_INFO(get_node()->get_logger(), "Postural task is activated");
-    }
-    else
-    {
-      RCLCPP_INFO(get_node()->get_logger(), "Postural task is NOT activated");
-    }
-
     RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::SUCCESS;
@@ -159,7 +148,7 @@ namespace cartesian_impedance_controller
     m_old_vel_error = ctrl::VectorND::Zero(Base::m_joint_number);
 
     m_target_wrench = ctrl::Vector6D::Zero();
-    
+
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::SUCCESS;
   }
@@ -291,7 +280,7 @@ namespace cartesian_impedance_controller
     // Compute the torque to achieve the desired force
     tau_ext = jac.transpose() * m_target_wrench;
 
-    return tau_task + m_with_postural_task * tau_null + tau_ext;
+    return tau_task + tau_null + tau_ext;
   }
 
   void CartesianImpedanceController::targetWrenchCallback(
