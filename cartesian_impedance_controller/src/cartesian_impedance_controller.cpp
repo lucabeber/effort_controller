@@ -158,6 +158,8 @@ namespace cartesian_impedance_controller
 
     m_old_vel_error = ctrl::VectorND::Zero(Base::m_joint_number);
 
+    m_target_wrench = ctrl::Vector6D::Zero();
+    
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::SUCCESS;
   }
@@ -194,77 +196,9 @@ namespace cartesian_impedance_controller
     return controller_interface::return_type::OK;
   }
 
-  ctrl::Vector6D CartesianImpedanceController::computeForceError()
-  {
-    ctrl::Vector6D target_wrench;
-    m_hand_frame_control =
-        get_node()->get_parameter("hand_frame_control").as_bool();
-
-    if (m_hand_frame_control) // Assume end-effector frame by convention
-    {
-      target_wrench =
-          Base::displayInBaseLink(m_target_wrench, Base::m_end_effector_link);
-    }
-    else // Default to robot base frame
-    {
-      target_wrench = m_target_wrench;
-    }
-
-    // Superimpose target wrench and sensor wrench in base frame
-    return Base::displayInBaseLink(m_ft_sensor_wrench, m_new_ft_sensor_ref) +
-           target_wrench;
-  }
-
   ctrl::Vector6D CartesianImpedanceController::computeMotionError()
   {
     // Compute the cartesian error between the current and the target frame
-    // ctrl::Vector6D error;
-
-    // // Compute the difference between the two frames
-    // KDL::Twist error_frame;
-
-    // // Compute the error frame
-    // error_frame.vel = m_current_frame.p - m_target_frame.p;
-    // error_frame.rot =
-    //     0.5 * (m_target_frame.M.UnitX() * m_current_frame.M.UnitX() +
-    //            m_target_frame.M.UnitY() * m_current_frame.M.UnitY() +
-    //            m_target_frame.M.UnitZ() * m_current_frame.M.UnitZ());
-
-    // // Compute the error vector
-    // error(0) = error_frame(0);
-    // error(1) = error_frame(1);
-    // error(2) = error_frame(2);
-    // error(3) = error_frame(3);
-    // error(4) = error_frame(4);
-    // error(5) = error_frame(5);
-
-    // error(3) = std::round(error(3) * 1000) / 1000;
-    // error(4) = std::round(error(4) * 1000) / 1000;
-    // error(5) = std::round(error(5) * 1000) / 1000;
-
-    // // RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(),
-    // // 100,
-    // //                      "rot error: %f %f %f ", error(3), error(4), error(5));
-
-    // m_old_rot_error(0) = error(3);
-    // m_old_rot_error(1) = error(4);
-    // m_old_rot_error(2) = error(5);
-
-    // Print the target frame, the current frame and the error frame
-    // RCLCPP_INFO_STREAM(get_node()->get_logger(), "target frame: " <<
-    // m_target_frame.p.x() << " " << m_target_frame.p.y() << " " <<
-    // m_target_frame.p.z() << " " << m_target_frame.M.GetRot().x() << " " <<
-    // m_target_frame.M.GetRot().y() << " " << m_target_frame.M.GetRot().z());
-    // RCLCPP_INFO_STREAM(get_node()->get_logger(), "current frame: " <<
-    // m_current_frame.p.x() << " " << m_current_frame.p.y() << " " <<
-    // m_current_frame.p.z() << " " << m_current_frame.M.GetRot().x() << " " <<
-    // m_current_frame.M.GetRot().y() << " " << m_current_frame.M.GetRot().z());
-    // RCLCPP_INFO_STREAM(get_node()->get_logger(), "error frame: " <<
-    // error_frame(0) << " " << error_frame(1) << " " << error_frame(2) << " " <<
-    // error_frame(3) << " " << error_frame(4) << " " << error_frame(5));
-
-    //   // Compute motion error wrt robot_base_link
-    // m_current_frame = Base::m_ik_solver->getEndEffectorPose();
 
     // Transformation from target -> current corresponds to error = target - current
     KDL::Frame error_kdl;
@@ -293,23 +227,8 @@ namespace cartesian_impedance_controller
 
     // Reassign values
     ctrl::Vector6D error;
-    error(0) = error_kdl.p.x();
-    error(1) = error_kdl.p.y();
-    error(2) = error_kdl.p.z();
-    error(3) = rot_axis(0);
-    error(4) = rot_axis(1);
-    error(5) = rot_axis(2);
-
-    // return error;
-    RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 500,
-                         "error: %f %f %f %f %f %f", error(0), error(1), error(2),
-                         error(3), error(4), error(5));
-    // error(0) = 0.0;
-    // error(1) = 0.0;
-    // error(2) = 0.0;
-    // error(3) = 0.0;
-    // error(4) = 0.0;
-    // error(5) = 0.0;
+    error.head<3>() << error_kdl.p.x(), error_kdl.p.y(), error_kdl.p.z();
+    error.tail<3>() << rot_axis(0), rot_axis(1), rot_axis(2);
 
     return error;
   }
@@ -340,13 +259,9 @@ namespace cartesian_impedance_controller
     // Compute the motion error
     ctrl::Vector6D motion_error = computeMotionError();
 
+    // Initialize the torque vectors
     ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number),
         tau_ext(Base::m_joint_number);
-
-    // RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(),
-    // 500, "motion_error: %f %f %f %f %f %f", motion_error(0), motion_error(1),
-    // motion_error(2), motion_error(3), motion_error(4), motion_error(5)); Torque
-    // calculation for task space
 
     q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
 
@@ -360,67 +275,42 @@ namespace cartesian_impedance_controller
 
     m_old_vel_error = q_dot;
 
-    // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 500,
-    //                             "Stiffness before: \n" << m_cartesian_stiffness);
-
+    // Compute the stiffness and damping in the base link
     const auto base_link_stiffness = Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
     const auto base_link_damping = Base::displayInBaseLink(m_cartesian_damping, Base::m_end_effector_link);
 
-    // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 500, "Stiffness after: \n" << base_link_stiffness);
-    // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 500, "Damping after: \n" << base_link_damping);
+    // Compute the task torque
+    tau_task = jac.transpose() * (base_link_stiffness * motion_error - (base_link_damping * (jac * q_dot)));
 
-    tau_task = jac.transpose() * (base_link_stiffness * motion_error -
-                                  (base_link_damping * (jac * q_dot)));
-
-    // print damping
-    // RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 500,
-    //                      "q_dot: %f %f %f %f %f %f %f", q_dot(0), q_dot(1),
-    //                      q_dot(2), q_dot(3), q_dot(4), q_dot(5), q_dot(6));
-
+    // Compute the null space torque
     q_null_space = m_q_starting_pose;
     tau_null = (m_identity - jac.transpose() * jac_tran_pseudo_inverse) *
                (m_null_space_stiffness * (-q + q_null_space) -
                 m_null_space_damping * q_dot);
 
-    return tau_task + m_with_postural_task * tau_null; // + coriolis.data;
+    // Compute the torque to achieve the desired force
+    tau_ext = jac.transpose() * m_target_wrench;
+
+    return tau_task + m_with_postural_task * tau_null + tau_ext;
   }
-  // void CartesianImpedanceController::setFtSensorReferenceFrame(const
-  // std::string& new_ref)
-  // {
-  //   // Compute static transform from the force torque sensor to the new
-  //   reference
-  //   // frame of interest.
-  //   m_new_ft_sensor_ref = new_ref;
-
-  //   // Joint positions should cancel out, i.e. it doesn't matter as long as
-  //   they
-  //   // are the same for both transformations.
-  //   KDL::JntArray jnts(Base::m_ik_solver->getPositions());
-
-  //   KDL::Frame sensor_ref;
-  //   Base::m_forward_kinematics_solver->JntToCart(
-  //       jnts,
-  //       sensor_ref,
-  //       m_ft_sensor_ref_link);
-
-  //   KDL::Frame new_sensor_ref;
-  //   Base::m_forward_kinematics_solver->JntToCart(
-  //       jnts,
-  //       new_sensor_ref,
-  //       m_new_ft_sensor_ref);
-
-  //   m_ft_sensor_transform = new_sensor_ref.Inverse() * sensor_ref;
-  // }
 
   void CartesianImpedanceController::targetWrenchCallback(
       const geometry_msgs::msg::WrenchStamped::SharedPtr wrench)
   {
+    // Parse the target wrench
     m_target_wrench[0] = wrench->wrench.force.x;
     m_target_wrench[1] = wrench->wrench.force.y;
     m_target_wrench[2] = wrench->wrench.force.z;
     m_target_wrench[3] = wrench->wrench.torque.x;
     m_target_wrench[4] = wrench->wrench.torque.y;
     m_target_wrench[5] = wrench->wrench.torque.z;
+
+    // Check if the wrench is given in the base frame
+    if (wrench->header.frame_id != Base::m_robot_base_link)
+    {
+      // Transform the wrench to the base frame
+      m_target_wrench = Base::displayInBaseLink(m_target_wrench, wrench->header.frame_id);
+    }
   }
 
   void CartesianImpedanceController::targetFrameCallback(
@@ -443,28 +333,6 @@ namespace cartesian_impedance_controller
                    KDL::Vector(target->pose.position.x, target->pose.position.y,
                                target->pose.position.z));
   }
-  // void CartesianImpedanceController::ftSensorWrenchCallback(const
-  // geometry_msgs::msg::WrenchStamped::SharedPtr wrench)
-  // {
-  //   KDL::Wrench tmp;
-  //   tmp[0] = wrench->wrench.force.x;
-  //   tmp[1] = wrench->wrench.force.y;
-  //   tmp[2] = wrench->wrench.force.z;
-  //   tmp[3] = wrench->wrench.torque.x;
-  //   tmp[4] = wrench->wrench.torque.y;
-  //   tmp[5] = wrench->wrench.torque.z;
-
-  //   // Compute how the measured wrench appears in the frame of interest.
-  //   tmp = m_ft_sensor_transform * tmp;
-
-  //   m_ft_sensor_wrench[0] = tmp[0];
-  //   m_ft_sensor_wrench[1] = tmp[1];
-  //   m_ft_sensor_wrench[2] = tmp[2];
-  //   m_ft_sensor_wrench[3] = tmp[3];
-  //   m_ft_sensor_wrench[4] = tmp[4];
-  //   m_ft_sensor_wrench[5] = tmp[5];
-  // }
-
 } // namespace cartesian_impedance_controller
 
 // Pluginlib

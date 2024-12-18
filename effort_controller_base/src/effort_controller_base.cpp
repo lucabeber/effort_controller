@@ -73,7 +73,6 @@ namespace effort_controller_base
                                               hardware_interface::HW_IF_EFFORT});
       auto_declare<double>("solver.error_scale", 1.0);
       auto_declare<int>("solver.iterations", 1);
-      auto_declare<bool>("kuka", false);
       m_initialized = true;
     }
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -275,16 +274,7 @@ namespace effort_controller_base
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
           CallbackReturn::ERROR;
     }
-    // Check if kuka is been used
-    m_kuka = get_node()->get_parameter("kuka").as_bool();
-    if (m_kuka == true)
-    {
-      RCLCPP_WARN(
-          get_node()->get_logger(),
-          "Using Kuka, the position will be overwritten at each control cycle to "
-          "make the robot behave as in gravity compensation mode");
-      m_cmd_interface_types.push_back(hardware_interface::HW_IF_POSITION);
-    }
+
     m_configured = true;
 
     // Initialize effords to null
@@ -330,20 +320,6 @@ namespace effort_controller_base
     RCLCPP_INFO(get_node()->get_logger(), "Getting interfaces");
 
     // Get command handles.
-    // Position
-    if (m_kuka == true)
-    {
-      if (!controller_interface::get_ordered_interfaces(
-              command_interfaces_, m_joint_names,
-              hardware_interface::HW_IF_POSITION, m_joint_cmd_pos_handles))
-      {
-        RCLCPP_ERROR(get_node()->get_logger(),
-                     "Expected %zu '%s' command interfaces, got %zu.",
-                     m_joint_number, hardware_interface::HW_IF_POSITION,
-                     m_joint_cmd_pos_handles.size());
-        return CallbackReturn::ERROR;
-      }
-    }
     // Effort
     if (!controller_interface::get_ordered_interfaces(
             command_interfaces_, m_joint_names, hardware_interface::HW_IF_EFFORT,
@@ -418,14 +394,6 @@ namespace effort_controller_base
                                     m_joint_effort_limits(i));
           m_joint_cmd_eff_handles[i].get().set_value(m_efforts[i]);
         }
-      }
-    }
-
-    if (m_kuka == true)
-    {
-      for (size_t i = 0; i < m_joint_number; ++i)
-      {
-        m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
       }
     }
   }
