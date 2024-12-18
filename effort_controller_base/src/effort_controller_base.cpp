@@ -52,8 +52,15 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
     auto_declare<std::string>("robot_description", "");
     auto_declare<std::string>("robot_base_link", "");
     auto_declare<std::string>("end_effector_link", "");
-    auto_declare<std::vector<std::string>>("joints", std::vector<std::string>());
-    auto_declare<std::vector<std::string>>("command_interfaces", std::vector<std::string>());
+    auto_declare<std::vector<std::string>>("joints",
+                                           std::vector<std::string>());
+    auto_declare<std::vector<std::string>>("command_interfaces",
+            {hardware_interface::HW_IF_EFFORT});
+    auto_declare<std::vector<std::string>>("state_interfaces",
+            {hardware_interface::HW_IF_POSITION,
+             hardware_interface::HW_IF_VELOCITY,
+             hardware_interface::HW_IF_EFFORT});
+    auto_declare<double>("delta_tau_max", 1.0);
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
     m_initialized = true;
@@ -71,13 +78,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Effort
   }
 
   // // Get delta tau maximum
-  // m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
-  // if (m_delta_tau_max.empty())
-  // {
-  //   m_delta_tau_max = 1; // max delta of 1 Nm
-  // }
-  
-  m_delta_tau_max = 1.0; // max delta of 1 Nm
+  m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
+  RCLCPP_INFO_STREAM(get_node()->get_logger(),
+                     "Delta tau maximum: " << m_delta_tau_max);
+
   // Get kinematics specific configuration
   urdf::Model robot_model;
   KDL::Tree   robot_tree;
@@ -342,10 +346,16 @@ void EffortControllerBase::writeJointEffortCmds()
 void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND& tau)
 {
   // Saturation of torque rate
-  for (size_t i = 0; i < m_joint_number; i++)
-    {
-      const double difference = tau[i] - m_efforts[i];
-      m_efforts[i] += std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
+  for (size_t i = 0; i < m_joint_number; i++) {
+    const double difference = tau[i] - m_efforts[i];
+    // Print when torque rate is saturated
+    if (difference > m_delta_tau_max || difference < -m_delta_tau_max) {
+      RCLCPP_WARN(get_node()->get_logger(),
+                  "Joint %s torque rate saturated: %f", m_joint_names[i].c_str(),
+                  difference);
+    }
+    m_efforts[i] +=
+        std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
   }
 }
 

@@ -23,6 +23,7 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   auto_declare<std::string>("ft_sensor_ref_link", "");
   auto_declare<bool>("hand_frame_control", true);
 
+
   constexpr double default_lin_stiff = 500.0;
   constexpr double default_rot_stiff = 50.0;
   auto_declare<double>("stiffness.trans_x", default_lin_stiff);
@@ -44,6 +45,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
     return ret;
   }
 
+  // Init Float64MultiArray publisher m_pub
+  m_pub = get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
+      get_node()->get_name() + std::string("/data_control"), 10);
+  
   // Make sure sensor link is part of the robot chain
   m_ft_sensor_ref_link = get_node()->get_parameter("ft_sensor_ref_link").as_string();
   if(!Base::robotChainContains(m_ft_sensor_ref_link))
@@ -75,6 +80,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn Cartes
   tmp[5] = 2 * 0.707 * sqrt(tmp[5]);
 
   m_cartesian_damping = tmp.asDiagonal();
+
+  // Print stiffness matrix and damping matrix
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "stiffness: " << m_cartesian_stiffness);
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "damping: " << m_cartesian_damping);
 
   // Set nullspace stiffness
   m_null_space_stiffness = 10;
@@ -197,9 +206,22 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError()
   error(5) = error_frame(5);
 
   // Print the target frame, the current frame and the error frame
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "target frame: " << m_target_frame.p.x() << " " << m_target_frame.p.y() << " " << m_target_frame.p.z() << " " << m_target_frame.M.GetRot().x() << " " << m_target_frame.M.GetRot().y() << " " << m_target_frame.M.GetRot().z());
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "current frame: " << m_current_frame.p.x() << " " << m_current_frame.p.y() << " " << m_current_frame.p.z() << " " << m_current_frame.M.GetRot().x() << " " << m_current_frame.M.GetRot().y() << " " << m_current_frame.M.GetRot().z());
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "error frame: " << error_frame(0) << " " << error_frame(1) << " " << error_frame(2) << " " << error_frame(3) << " " << error_frame(4) << " " << error_frame(5));
+  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "target frame: " <<
+  // m_target_frame.p.x() << " " << m_target_frame.p.y() << " " <<
+  // m_target_frame.p.z() << " " << m_target_frame.M.GetRot().x() << " " <<
+  // m_target_frame.M.GetRot().y() << " " << m_target_frame.M.GetRot().z());
+  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "current frame: " <<
+  // m_current_frame.p.x() << " " << m_current_frame.p.y() << " " <<
+  // m_current_frame.p.z() << " " << m_current_frame.M.GetRot().x() << " " <<
+  // m_current_frame.M.GetRot().y() << " " << m_current_frame.M.GetRot().z());
+  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "error frame: " <<
+  // error_frame(0) << " " << error_frame(1) << " " << error_frame(2) << " " <<
+  // error_frame(3) << " " << error_frame(4) << " " << error_frame(5));
+    // Publish error data and joint torques m_pub
+  // std_msgs::msg::Float64MultiArray msg;
+  // msg.data = {error(0), error(1), error(2), error(3), error(4), error(5), m_current_frame.p.x(), m_current_frame.p.y(), m_current_frame.p.z(), m_current_frame.M.GetRot().x(), m_current_frame.M.GetRot().y(), m_current_frame.M.GetRot().z(), m_target_frame.p.x(), m_target_frame.p.y(), m_target_frame.p.z(), m_target_frame.M.GetRot().x(), m_target_frame.M.GetRot().y(), m_target_frame.M.GetRot().z()};
+  // m_pub->publish(msg);
+  // print current position 
   return error;
 }
 
@@ -250,10 +272,10 @@ ctrl::VectorND CartesianImpedanceController::computeTorque()
 
   Base::m_dyn_solver->JntToGravity(Base::m_joint_positions,gravity);
   Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions, Base::m_joint_velocities,coriolis);
-  //RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau_task: " << tau_task);
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau_task: " << tau_task);
   // RCLCPP_INFO_STREAM(get_node()->get_logger(), "gravity: " << gravity.data);
   // RCLCPP_INFO_STREAM(get_node()->get_logger(), "coriolis: " << coriolis.data);
-  return tau_task + tau_null;
+  return tau_task;// + tau_null;
 }  
 // void CartesianImpedanceController::setFtSensorReferenceFrame(const std::string& new_ref)
 // {

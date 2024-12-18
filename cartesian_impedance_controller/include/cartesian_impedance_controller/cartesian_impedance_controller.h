@@ -5,6 +5,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include <effort_controller_base/effort_controller_base.h>
 #include <controller_interface/controller_interface.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
 
 namespace cartesian_impedance_controller
 {
@@ -96,6 +97,11 @@ class CartesianImpedanceController : public virtual effort_controller_base::Effo
      * intuitive for tele-manipulation.
      */
     bool m_hand_frame_control;
+
+    bool m_with_postural_task;
+
+    // Publisher of float64 multiarray
+    rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr m_pub;
 
 };
 
