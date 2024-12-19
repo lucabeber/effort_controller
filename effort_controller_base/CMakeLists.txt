@@ -58,9 +58,18 @@ ament_target_dependencies(${PROJECT_NAME}
         ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
+
+
+
+# Prevent pluginlib from using boost
+target_compile_definitions(${PROJECT_NAME} PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
+
+
 #--------------------------------------------------------------------------------
 # Install and export
 #--------------------------------------------------------------------------------
+
+# pluginlib_export_plugin_description_file(effort_controller_base ik_solver_plugin.xml)
 
 # Note: The workflow as described here
 # https://docs.ros.org/en/foxy/How-To-Guides/Ament-CMake-Documentation.html#building-a-library
@@ -75,6 +84,15 @@ install(
   DESTINATION include
 )
 
+install(
+  TARGETS ${PROJECT_NAME} 
+  #EXPORT my_targets_from_this_package
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  #INCLUDES DESTINATION include
+)
+
 
 # Note: For the target based workflow, they seem to be superfluous.
 # But since that doesn't work yet, I'll add them just in case.
@@ -82,6 +100,9 @@ install(
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 ament_export_include_directories(
   include
+)
+ament_export_libraries(
+  ${PROJECT_NAME} 
 )
 
 ament_package()
