@@ -62,7 +62,9 @@ namespace effort_controller_base
       auto_declare<std::string>("robot_base_link", "");
       auto_declare<std::string>("compliance_ref_link", "");
       auto_declare<std::string>("end_effector_link", "");
-      
+      auto_declare<bool>("kuka", false);
+      auto_declare<double>("delta_tau_max", 1.0);
+
       auto_declare<std::vector<std::string>>("joints",
                                              std::vector<std::string>());
       auto_declare<std::vector<std::string>>("command_interfaces",
@@ -90,13 +92,14 @@ namespace effort_controller_base
     }
 
     // // Get delta tau maximum
-    // m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
-    // if (m_delta_tau_max.empty())
-    // {
-    //   m_delta_tau_max = 1; // max delta of 1 Nm
-    // }
+    m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
+    if (m_delta_tau_max < 1.0)
+    {
+      RCLCPP_ERROR(get_node()->get_logger(), "delta_tau_max must be greater than 1.0 Nm");
+      return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
+          CallbackReturn::ERROR;
+    }
 
-    m_delta_tau_max = 1.0; // max delta of 1 Nm
     // Get kinematics specific configuration
     urdf::Model robot_model;
     KDL::Tree robot_tree;
@@ -274,7 +277,16 @@ namespace effort_controller_base
       return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
           CallbackReturn::ERROR;
     }
-
+    // Check if kuka is been used
+    m_kuka = get_node()->get_parameter("kuka").as_bool();
+    if (m_kuka == true)
+    {
+      RCLCPP_WARN(
+          get_node()->get_logger(),
+          "Using Kuka, the position will be overwritten at each control cycle to "
+          "make the robot behave as in gravity compensation mode");
+      m_cmd_interface_types.push_back(hardware_interface::HW_IF_POSITION);
+    }
     m_configured = true;
 
     // Initialize effords to null
@@ -320,6 +332,20 @@ namespace effort_controller_base
     RCLCPP_INFO(get_node()->get_logger(), "Getting interfaces");
 
     // Get command handles.
+    // Position
+    if (m_kuka == true)
+    {
+      if (!controller_interface::get_ordered_interfaces(
+              command_interfaces_, m_joint_names,
+              hardware_interface::HW_IF_POSITION, m_joint_cmd_pos_handles))
+      {
+        RCLCPP_ERROR(get_node()->get_logger(),
+                     "Expected %zu '%s' command interfaces, got %zu.",
+                     m_joint_number, hardware_interface::HW_IF_POSITION,
+                     m_joint_cmd_pos_handles.size());
+        return CallbackReturn::ERROR;
+      }
+    }
     // Effort
     if (!controller_interface::get_ordered_interfaces(
             command_interfaces_, m_joint_names, hardware_interface::HW_IF_EFFORT,
@@ -396,6 +422,13 @@ namespace effort_controller_base
         }
       }
     }
+    if (m_kuka == true)
+    {
+      for (size_t i = 0; i < m_joint_number; ++i)
+      {
+        m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
+      }
+    }
   }
 
   void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND &tau)
@@ -406,6 +439,11 @@ namespace effort_controller_base
       const double difference = tau[i] - m_efforts[i];
       m_efforts[i] +=
           std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
+      if (std::abs(difference) > m_delta_tau_max)
+      {
+        RCLCPP_WARN(get_node()->get_logger(),
+                    "Joint %s effort rate saturated", m_joint_names[i].c_str());
+      }
     }
   }
 
@@ -508,13 +546,6 @@ namespace effort_controller_base
 
       m_joint_positions(i) = position_interface.get_value();
       m_joint_velocities(i) = velocity_interface.get_value();
-
-      // std::transform(m_joint_positions.begin(), m_joint_positions.end(), m_joint_positions.begin(),
-      // [](double val) -> double {
-      //     return std::round(val * 10000) / 10000;
-      // });
-      // Rount to 4 decimal places
-      // m_joint_positions(i) = std::round(m_joint_positions(i) * 10000) / 10000;
     }
   }
 

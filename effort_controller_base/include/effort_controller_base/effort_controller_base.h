@@ -172,6 +172,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     std::vector<std::string> m_cmd_interface_types;
     std::vector<std::string> m_state_interface_types;
     std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>> m_joint_cmd_eff_handles;
+    std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface>> m_joint_cmd_pos_handles;
 
     std::vector<std::string>                          m_joint_names;
     ctrl::VectorND                                    m_efforts;
@@ -191,6 +192,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     KDL::JntArray m_joint_effort_limits;
     double m_delta_tau_max;
     
+    bool m_kuka;
 };
 
 }
