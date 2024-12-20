@@ -38,13 +38,16 @@
 #else
 #define ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC ROS2_CONTROL_DEMO_EXAMPLE_1_IMPORT
 #endif
-#define ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC_TYPE ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC
+#define ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC_TYPE                                \
+  ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC
 #define ROS2_CONTROL_DEMO_EXAMPLE_1_LOCAL
 #else
-#define ROS2_CONTROL_DEMO_EXAMPLE_1_EXPORT __attribute__((visibility("default")))
+#define ROS2_CONTROL_DEMO_EXAMPLE_1_EXPORT                                     \
+  __attribute__((visibility("default")))
 #define ROS2_CONTROL_DEMO_EXAMPLE_1_IMPORT
 #if __GNUC__ >= 4
-#define ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC __attribute__((visibility("default")))
+#define ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC                                     \
+  __attribute__((visibility("default")))
 #define ROS2_CONTROL_DEMO_EXAMPLE_1_LOCAL __attribute__((visibility("hidden")))
 #else
 #define ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC
@@ -53,4 +56,4 @@
 #define ROS2_CONTROL_DEMO_EXAMPLE_1_PUBLIC_TYPE
 #endif
 
-#endif  // ROS2_CONTROL_DEMO_EXAMPLE_1__VISIBILITY_CONTROL_H_
+#endif // ROS2_CONTROL_DEMO_EXAMPLE_1__VISIBILITY_CONTROL_H_

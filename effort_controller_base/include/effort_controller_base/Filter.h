@@ -37,7 +37,6 @@
  */
 //-----------------------------------------------------------------------------
 
-
 #ifndef FORWARD_DYNAMICS_SOLVER_H_INCLUDED
 #define FORWARD_DYNAMICS_SOLVER_H_INCLUDED
 
@@ -54,77 +53,69 @@
 #include <memory>
 #include <vector>
 
-namespace effort_controller_base{
+namespace effort_controller_base {
 
-template <class T>
-class LowPassFilter
-{
-  public:
-    LowPassFilter();
-    ~LowPassFilter();
+template <class T> class LowPassFilter {
+public:
+  LowPassFilter();
+  ~LowPassFilter();
 
-    /**
-     * @brief Initializes the filter with the given parameters.
-     * 
-     * @param nh Shared pointer to the lifecycle node.
-     * @param alpha Smoothing factor for the filter, must be in the range [0, 1].
-     * @param step Time step for the filter.
-     * @return true if initialization is successful, false otherwise.
-     */
-    bool init(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> nh, double alpha, double step)
-    {
-      if (!setAlpha(alpha))
-      {
-        RCLCPP_ERROR(nh->get_logger(), "Alpha value must be in the range [0, 1]");
-        return false;
-      }
-      m_time_step = step;
-      m_current_value = 0.0;
+  /**
+   * @brief Initializes the filter with the given parameters.
+   *
+   * @param nh Shared pointer to the lifecycle node.
+   * @param alpha Smoothing factor for the filter, must be in the range [0, 1].
+   * @param step Time step for the filter.
+   * @return true if initialization is successful, false otherwise.
+   */
+  bool init(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> nh, double alpha,
+            double step) {
+    if (!setAlpha(alpha)) {
+      RCLCPP_ERROR(nh->get_logger(), "Alpha value must be in the range [0, 1]");
+      return false;
+    }
+    m_time_step = step;
+    m_current_value = 0.0;
+  }
+
+  /**
+   * @brief Sets the alpha value for the filter.
+   *
+   * This function sets the alpha value, which must be between 0.0 and 1.0
+   * inclusive. The alpha value is used to control the filter's behavior.
+   *
+   * @param alpha The alpha value to set. Must be between 0.0 and 1.0.
+   * @return true if the alpha value is valid and has been set, false otherwise.
+   */
+  bool setAlpha(double alpha) {
+    if (alpha < 0.0 || alpha > 1.0) {
+      return false;
     }
 
-    /**
-     * @brief Sets the alpha value for the filter.
-     * 
-     * This function sets the alpha value, which must be between 0.0 and 1.0 inclusive.
-     * The alpha value is used to control the filter's behavior.
-     * 
-     * @param alpha The alpha value to set. Must be between 0.0 and 1.0.
-     * @return true if the alpha value is valid and has been set, false otherwise.
-     */
-    bool setAlpha(double alpha)
-    {
-      if (alpha < 0.0 || alpha > 1.0)
-      {
-        return false;
-      }
-      
-      m_alpha = alpha;
-      return true;
-    }
+    m_alpha = alpha;
+    return true;
+  }
 
-    /**
-     * @brief Updates the filter with a new value.
-     * 
-     * This function updates the filter with a new value and returns the filtered value.
-     * 
-     * @param new_value The new value to update the filter with.
-     * @return The filtered value.
-     */
-    T update(T new_value)
-    {
-      m_current_value = m_alpha * new_value + (1 - m_alpha) * m_current_value;
-      return m_current_value;
-    }
+  /**
+   * @brief Updates the filter with a new value.
+   *
+   * This function updates the filter with a new value and returns the filtered
+   * value.
+   *
+   * @param new_value The new value to update the filter with.
+   * @return The filtered value.
+   */
+  T update(T new_value) {
+    m_current_value = m_alpha * new_value + (1 - m_alpha) * m_current_value;
+    return m_current_value;
+  }
 
-  private:
-
-    double m_alpha;
-    T m_current_value;
-    double m_time_step;
-    
+private:
+  double m_alpha;
+  T m_current_value;
+  double m_time_step;
 };
 
-
-} // namespace
+} // namespace effort_controller_base
 
 #endif
