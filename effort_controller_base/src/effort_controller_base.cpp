@@ -442,12 +442,13 @@ namespace effort_controller_base
       if (std::abs(difference) > m_delta_tau_max)
       {
         RCLCPP_WARN(get_node()->get_logger(),
-                    "Joint %s effort rate saturated", m_joint_names[i].c_str());
+                    "Joint %s effort rate saturated, was: %f",
+                    m_joint_names[i].c_str(), tau[i]);
       }
     }
   }
 
-  void EffortControllerBase::computeNullSpace(const KDL::Frame &desired_pose)
+  void EffortControllerBase::computeIKSolution(const KDL::Frame &desired_pose, ctrl::VectorND &simulated_joint_positions)
   {
     // Invese kinematics
     int ret = m_ik_solver->CartToJnt(m_joint_positions, desired_pose,
@@ -459,6 +460,8 @@ namespace effort_controller_base
       RCLCPP_ERROR(get_node()->get_logger(), "Could not find IK solution");
       return;
     }
+
+    simulated_joint_positions = m_simulated_joint_motion.data;
   }
 
   ctrl::Vector6D EffortControllerBase::displayInBaseLink(

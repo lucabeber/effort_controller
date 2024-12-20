@@ -114,6 +114,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface
     ctrl::Vector6D displayInTipLink(const ctrl::Vector6D& vector, const std::string& to);
 
     void updateJointStates();
+
     /**
      * @brief Check if specified links are part of the robot chain
      *
@@ -133,7 +134,15 @@ class EffortControllerBase : public controller_interface::ControllerInterface
       return false;
     }
 
-    void computeNullSpace(const KDL::Frame& desired_pose);
+    /**
+     * @brief Computes the Inverse Kinematics (IK) solution for the given desired pose.
+     *
+     * This function calculates the joint positions required to achieve the specified
+     * end-effector pose using the Kinematics and Dynamics Library (KDL).
+     *
+     * @param desired_pose The desired end-effector pose represented as a KDL::Frame.
+     */
+    void computeIKSolution(const KDL::Frame& desired_pose, ctrl::VectorND& simulated_joint_positions);
 
     KDL::Chain m_robot_chain;
     KDL::Jacobian  m_jacobian;            // Jacobian
