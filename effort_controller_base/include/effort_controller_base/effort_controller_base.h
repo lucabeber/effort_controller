@@ -1,9 +1,12 @@
 #ifndef EFFORT_CONTROLLER_BASE_H_INCLUDED
 #define EFFORT_CONTROLLER_BASE_H_INCLUDED
 
-#include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include <controller_interface/controller_interface.hpp>
 #include <effort_controller_base/Utility.h>
+#include <urdf/model.h>
+#include <urdf_model/joint.h>
+
+#include <cmath>
+#include <controller_interface/controller_interface.hpp>
 #include <functional>
 #include <geometry_msgs/msg/wrench_stamped.hpp>
 #include <hardware_interface/loaned_command_interface.hpp>
@@ -17,8 +20,11 @@
 #include <kdl/chainjnttojacsolver.hpp>
 #include <kdl/frames.hpp>
 #include <kdl/jacobian.hpp>
+#include <kdl/jntarray.hpp>
 #include <kdl/solveri.hpp>
+#include <kdl/tree.hpp>
 #include <kdl/treefksolverpos_recursive.hpp>
+#include <kdl_parser/kdl_parser.hpp>
 #include <memory>
 #include <pluginlib/class_loader.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -26,7 +32,25 @@
 #include <trajectory_msgs/msg/joint_trajectory_point.hpp>
 #include <vector>
 
+#include "controller_interface/controller_interface.hpp"
+#include "controller_interface/helpers.hpp"
+#include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
+#include "std_msgs/msg/string.hpp"
+
 namespace effort_controller_base {
+
+class RobotDescriptionListener : public rclcpp::Node {
+ public:
+  RobotDescriptionListener(std::shared_ptr<std::string> robot_description_ptr,
+                           const std::string &topic_name);
+  bool m_description_received_ = false;
+
+ private:
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr m_description_sub_;
+  std::shared_ptr<std::string> m_robot_description_ptr_;
+};
 
 /**
  * @brief Base class for each effort controller
@@ -39,7 +63,7 @@ namespace effort_controller_base {
  *
  */
 class EffortControllerBase : public controller_interface::ControllerInterface {
-public:
+ public:
   EffortControllerBase();
   virtual ~EffortControllerBase(){};
 
@@ -60,7 +84,7 @@ public:
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
 
-protected:
+ protected:
   /**
    * @brief Write joint control commands to the real hardware
    *
@@ -147,7 +171,7 @@ protected:
                          ctrl::VectorND &simulated_joint_positions);
 
   KDL::Chain m_robot_chain;
-  KDL::Jacobian m_jacobian; // Jacobian
+  KDL::Jacobian m_jacobian;  // Jacobian
 
   std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
   std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
@@ -179,7 +203,7 @@ protected:
   KDL::JntArray m_joint_velocities;
   KDL::JntArray m_simulated_joint_motion;
 
-private:
+ private:
   std::vector<std::string> m_cmd_interface_types;
   std::vector<std::string> m_state_interface_types;
   std::vector<
@@ -209,6 +233,6 @@ private:
   bool m_kuka;
 };
 
-} // namespace effort_controller_base
+}  // namespace effort_controller_base
 
 #endif

@@ -1,23 +1,30 @@
-#include "controller_interface/controller_interface.hpp"
-#include "controller_interface/helpers.hpp"
-#include "hardware_interface/types/hardware_interface_type_values.hpp"
-#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
-#include <cmath>
 #include <effort_controller_base/effort_controller_base.h>
-#include <kdl/jntarray.hpp>
-#include <kdl/tree.hpp>
-#include <kdl_parser/kdl_parser.hpp>
-#include <urdf/model.h>
-#include <urdf_model/joint.h>
-
-#include "controller_interface/controller_interface.hpp"
-#include "controller_interface/helpers.hpp"
-#include "hardware_interface/types/hardware_interface_type_values.hpp"
-#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 
 namespace effort_controller_base {
 
 EffortControllerBase::EffortControllerBase() {}
+
+RobotDescriptionListener::RobotDescriptionListener(
+    std::shared_ptr<std::string> robot_description_ptr,
+    const std::string &topic_name)
+    : Node("RobotDescriptionListener") {
+  m_robot_description_ptr_ = robot_description_ptr;
+  // Lamda callback for robot description
+  auto descriptionCB =
+      [this](const std_msgs::msg::String::SharedPtr msg) -> void {
+    *m_robot_description_ptr_ = msg->data;
+    m_description_sub_.reset();
+    RCLCPP_INFO(get_logger(), "Received robot description");
+    m_description_received_ = true;
+  };
+
+  // set to qos to be RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL
+  auto durability_policy = rmw_qos_profile_default;
+  durability_policy.durability = RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+  auto qos = rclcpp::QoS(rclcpp::KeepAll(), durability_policy);
+  m_description_sub_ = create_subscription<std_msgs::msg::String>(
+      topic_name, qos, descriptionCB);
+}
 
 controller_interface::InterfaceConfiguration
 EffortControllerBase::command_interface_configuration() const {
@@ -60,13 +67,32 @@ EffortControllerBase::on_init() {
                                            std::vector<std::string>());
     auto_declare<std::vector<std::string>>("command_interfaces",
                                            {hardware_interface::HW_IF_EFFORT});
-    auto_declare<std::vector<std::string>>("state_interfaces",
-                                           {hardware_interface::HW_IF_POSITION,
-                                            hardware_interface::HW_IF_VELOCITY,
-                                            hardware_interface::HW_IF_EFFORT});
+    auto_declare<std::vector<std::string>>(
+        "state_interfaces",
+        {hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY,
+         hardware_interface::HW_IF_EFFORT});
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
     m_initialized = true;
+    // append namespace to robot_description topic
+    const std::string topic_name =
+        std::string(get_node()->get_namespace()) + "/robot_description";
+    // create shared pointer to robot description
+    auto robot_description_ptr = std::make_shared<std::string>();
+    auto robot_description_listener =
+        std::make_shared<RobotDescriptionListener>(robot_description_ptr,
+                                                   topic_name);
+    // create executor to wait for robot description
+    auto executor =
+        std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+    executor->add_node(robot_description_listener);
+    while (!robot_description_listener->m_description_received_) {
+      executor->spin_some();
+      RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(),
+                           1000, "Waiting for robot description");
+      rclcpp::sleep_for(std::chrono::milliseconds(100));
+    }
+    m_robot_description = *robot_description_ptr;
   }
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -93,13 +119,6 @@ EffortControllerBase::on_configure(
   urdf::Model robot_model;
   KDL::Tree robot_tree;
 
-  m_robot_description =
-      get_node()->get_parameter("robot_description").as_string();
-  if (m_robot_description.empty()) {
-    RCLCPP_ERROR(get_node()->get_logger(), "robot_description is empty");
-    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-        CallbackReturn::ERROR;
-  }
   m_robot_base_link = get_node()->get_parameter("robot_base_link").as_string();
   if (m_robot_base_link.empty()) {
     RCLCPP_ERROR(get_node()->get_logger(), "robot_base_link is empty");
@@ -136,9 +155,10 @@ EffortControllerBase::on_configure(
   }
   if (!robot_tree.getChain(m_robot_base_link, m_end_effector_link,
                            m_robot_chain)) {
-    const std::string error = ""
-                              "Failed to parse robot chain from urdf model. "
-                              "Do robot_base_link and end_effector_link exist?";
+    const std::string error =
+        ""
+        "Failed to parse robot chain from urdf model. "
+        "Do robot_base_link and end_effector_link exist?";
     RCLCPP_ERROR(get_node()->get_logger(), error.c_str());
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::ERROR;
@@ -414,9 +434,8 @@ void EffortControllerBase::computeIKSolution(
   simulated_joint_positions = m_simulated_joint_motion.data;
 }
 
-ctrl::Vector6D
-EffortControllerBase::displayInBaseLink(const ctrl::Vector6D &vector,
-                                        const std::string &from) {
+ctrl::Vector6D EffortControllerBase::displayInBaseLink(
+    const ctrl::Vector6D &vector, const std::string &from) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -439,9 +458,8 @@ EffortControllerBase::displayInBaseLink(const ctrl::Vector6D &vector,
   return out;
 }
 
-ctrl::Matrix6D
-EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D &tensor,
-                                        const std::string &from) {
+ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
+    const ctrl::Matrix6D &tensor, const std::string &from) {
   // Get rotation to base
   KDL::Frame R_kdl;
   m_forward_kinematics_solver->JntToCart(m_joint_positions, R_kdl, from);
@@ -462,9 +480,8 @@ EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D &tensor,
   return tmp;
 }
 
-ctrl::Vector6D
-EffortControllerBase::displayInTipLink(const ctrl::Vector6D &vector,
-                                       const std::string &to) {
+ctrl::Vector6D EffortControllerBase::displayInTipLink(
+    const ctrl::Vector6D &vector, const std::string &to) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -493,7 +510,15 @@ void EffortControllerBase::updateJointStates() {
 
     m_joint_positions(i) = position_interface.get_value();
     m_joint_velocities(i) = velocity_interface.get_value();
+
+    // std::transform(m_joint_positions.begin(), m_joint_positions.end(),
+    // m_joint_positions.begin(),
+    // [](double val) -> double {
+    //     return std::round(val * 10000) / 10000;
+    // });
+    // Rount to 4 decimal places
+    // m_joint_positions(i) = std::round(m_joint_positions(i) * 10000) / 10000;
   }
 }
 
-} // namespace effort_controller_base
+}  // namespace effort_controller_base
