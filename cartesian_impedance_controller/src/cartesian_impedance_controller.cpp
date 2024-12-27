@@ -1,8 +1,8 @@
+#include <cartesian_impedance_controller/cartesian_impedance_controller.h>
+#include <cartesian_impedance_controller/pseudo_inversion.h>
+
 #include "controller_interface/controller_interface.hpp"
 #include "effort_controller_base/Utility.h"
-#include <cartesian_impedance_controller/cartesian_impedance_controller.h>
-
-#include <cartesian_impedance_controller/pseudo_inversion.h>
 
 namespace cartesian_impedance_controller {
 
@@ -161,9 +161,8 @@ CartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type
-CartesianImpedanceController::update(const rclcpp::Time &time,
-                                     const rclcpp::Duration &period) {
+controller_interface::return_type CartesianImpedanceController::update(
+    const rclcpp::Time &time, const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -191,7 +190,7 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -276,7 +275,18 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
-  return tau_task + tau_null + tau_ext;
+  // kdl jnt array of the same size as the joint number
+  KDL::JntArray tau_coriolis(Base::m_joint_number),
+      tau_gravity(Base::m_joint_number);
+  Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions,
+                                    Base::m_joint_velocities, tau_coriolis);
+  Base::m_dyn_solver->JntToGravity(Base::m_joint_positions, tau_gravity);
+
+  RCLCPP_INFO_STREAM(get_node()->get_logger(),
+                     "tau_plus: " << tau_coriolis.data + tau_gravity.data);
+
+  return tau_task + tau_null +
+         tau_ext;  // + tau_coriolis.data + tau_gravity.data;
 }
 
 void CartesianImpedanceController::targetWrenchCallback(
@@ -315,7 +325,7 @@ void CartesianImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-} // namespace cartesian_impedance_controller
+}  // namespace cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

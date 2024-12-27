@@ -1,5 +1,6 @@
 ![build badge](https://github.com/lucabeber/effort_controller/actions/workflows/humble.yml/badge.svg)
 ![build badge](https://github.com/lucabeber/effort_controller/actions/workflows/jazzy.yml/badge.svg)
+![build badge](https://github.com/lucabeber/effort_controller/actions/workflows/rolling.yml/badge.svg)
 
 
 This repository aim to create a robot independent torque controller based on ROS2 controllers. 
