@@ -230,7 +230,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   KDL::JntArray m_joint_effort_limits;
   double m_delta_tau_max;
 
-  bool m_kuka;
+  bool m_kuka_hw;
 };
 
 }  // namespace effort_controller_base

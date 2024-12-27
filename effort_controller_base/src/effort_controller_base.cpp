@@ -268,8 +268,8 @@ EffortControllerBase::on_configure(
         CallbackReturn::ERROR;
   }
   // Check if kuka is been used
-  m_kuka = get_node()->get_parameter("kuka").as_bool();
-  if (m_kuka == true) {
+  m_kuka_hw = get_node()->get_parameter("kuka_hw").as_bool();
+  if (m_kuka_hw == true) {
     RCLCPP_WARN(
         get_node()->get_logger(),
         "Using Kuka, the position will be overwritten at each control cycle to "
@@ -318,7 +318,7 @@ EffortControllerBase::on_activate(
 
   // Get command handles.
   // Position
-  if (m_kuka == true) {
+  if (m_kuka_hw == true) {
     if (!controller_interface::get_ordered_interfaces(
             command_interfaces_, m_joint_names,
             hardware_interface::HW_IF_POSITION, m_joint_cmd_pos_handles)) {
@@ -398,7 +398,7 @@ void EffortControllerBase::writeJointEffortCmds() {
       }
     }
   }
-  if (m_kuka == true) {
+  if (m_kuka_hw == true) {
     for (size_t i = 0; i < m_joint_number; ++i) {
       m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
     }
