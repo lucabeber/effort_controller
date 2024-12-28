@@ -216,9 +216,6 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
 }
 
 ctrl::VectorND CartesianImpedanceController::computeTorque() {
-  // Find the desired joints positions
-  // Base::computeNullSpace(m_target_frame);
-
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
@@ -244,16 +241,11 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number),
       tau_ext(Base::m_joint_number);
 
+  // Filter the velocity errorm_old_vel_error
   q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
-
-  q_dot(0) = std::round(q_dot(0) * 1000) / 1000;
-  q_dot(1) = std::round(q_dot(1) * 1000) / 1000;
-  q_dot(2) = std::round(q_dot(2) * 1000) / 1000;
-  q_dot(3) = std::round(q_dot(3) * 1000) / 1000;
-  q_dot(4) = std::round(q_dot(4) * 1000) / 1000;
-  q_dot(5) = std::round(q_dot(5) * 1000) / 1000;
-  q_dot(6) = std::round(q_dot(6) * 1000) / 1000;
-
+  for (int i = 0; i < q_dot.size(); i++) {
+    q_dot(i) = std::round(q_dot(i) * 1000) / 1000;
+  }
   m_old_vel_error = q_dot;
 
   // Compute the stiffness and damping in the base link
@@ -275,18 +267,21 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
-  // kdl jnt array of the same size as the joint number
+  ctrl::VectorND tau = tau_task + tau_null + tau_ext;
+
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
-  Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions,
-                                    Base::m_joint_velocities, tau_coriolis);
-  Base::m_dyn_solver->JntToGravity(Base::m_joint_positions, tau_gravity);
 
-  RCLCPP_INFO_STREAM(get_node()->get_logger(),
-                     "tau_plus: " << tau_coriolis.data + tau_gravity.data);
-
-  return tau_task + tau_null +
-         tau_ext;  // + tau_coriolis.data + tau_gravity.data;
+  if (m_compensate_gravity) {
+    Base::m_dyn_solver->JntToGravity(Base::m_joint_positions, tau_gravity);
+    tau = tau + tau_gravity.data;
+  }
+  if (m_compensate_coriolis) {
+    Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions,
+                                      Base::m_joint_velocities, tau_coriolis);
+    tau = tau + tau_coriolis.data;
+  }
+  return tau;
 }
 
 void CartesianImpedanceController::targetWrenchCallback(

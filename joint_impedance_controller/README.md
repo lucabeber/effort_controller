@@ -26,13 +26,13 @@ joint_impedance_controller:
     ft_sensor_ref_link: "sensor_link"
     compliance_ref_link: "compliance_link"
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - joint_01
+      - joint_02
+      - joint_03
+      - joint_04
+      - joint_05
+      - joint_06
+      - joint_07
       
     command_interfaces:
       - effort
@@ -42,14 +42,16 @@ joint_impedance_controller:
       - velocity
 
     stiffness:
-        trans_x: 500
-        trans_y: 500
-        trans_z: 500
-        rot_x: 50
-        rot_y: 50
-        rot_z: 50
+      joint1: 100
+      joint2: 100
+      joint3: 100
+      joint4: 50
+      joint5: 50
+      joint6: 50
 
     nullspace_stiffness: 0.0
+    compensate_gravity: false
+    compensate_coriolis: false
 
 
 # More controller specifications here

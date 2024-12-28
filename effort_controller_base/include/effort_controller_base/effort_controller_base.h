@@ -190,8 +190,8 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   std::string m_end_effector_link;
   std::string m_compliance_ref_link;
   std::string m_robot_base_link;
-  int m_iterations;
-
+  bool m_compensate_gravity;
+  bool m_compensate_coriolis;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
       m_joint_state_pos_handles;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
@@ -223,7 +223,6 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   bool m_active = {false};
 
   // Dynamic parameters
-  double m_error_scale;
   std::string m_robot_description;
 
   // Effort limits

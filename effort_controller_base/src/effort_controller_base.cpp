@@ -60,7 +60,9 @@ EffortControllerBase::on_init() {
     auto_declare<std::string>("robot_base_link", "");
     auto_declare<std::string>("compliance_ref_link", "");
     auto_declare<std::string>("end_effector_link", "");
-    auto_declare<bool>("kuka", false);
+    auto_declare<bool>("kuka_hw", false);
+    auto_declare<bool>("compensate_gravity", false);
+    auto_declare<bool>("compensate_coriolis", false);
     auto_declare<double>("delta_tau_max", 1.0);
 
     auto_declare<std::vector<std::string>>("joints",
@@ -76,7 +78,7 @@ EffortControllerBase::on_init() {
     m_initialized = true;
     // append namespace to robot_description topic
     const std::string topic_name =
-        std::string(get_node()->get_namespace()) + "/robot_description";
+        std::string(get_node()->get_namespace()) + "robot_description";
     // create shared pointer to robot description
     auto robot_description_ptr = std::make_shared<std::string>();
     auto robot_description_listener =
@@ -106,6 +108,16 @@ EffortControllerBase::on_configure(
         CallbackReturn::SUCCESS;
   }
 
+  m_compensate_gravity =
+      get_node()->get_parameter("compensate_gravity").as_bool();
+  m_compensate_coriolis =
+      get_node()->get_parameter("compensate_coriolis").as_bool();
+
+  RCLCPP_WARN_STREAM(get_node()->get_logger(), "Gravity compensation set to "
+                                                   << std::boolalpha
+                                                   << m_compensate_gravity);
+  RCLCPP_WARN_STREAM(get_node()->get_logger(),
+                     "Coriolis compensation set to " << m_compensate_coriolis);
   // // Get delta tau maximum
   m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
   if (m_delta_tau_max < 1.0) {
@@ -228,8 +240,6 @@ EffortControllerBase::on_configure(
       *m_ik_solver_vel, 100, 1e-6));
   m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
   m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain, grav));
-  m_iterations = get_node()->get_parameter("solver.iterations").as_int();
-  m_error_scale = get_node()->get_parameter("solver.error_scale").as_double();
   RCLCPP_INFO(get_node()->get_logger(),
               "Finished initializing kinematics solvers");
 
