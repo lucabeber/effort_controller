@@ -76,9 +76,19 @@ EffortControllerBase::on_init() {
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
     m_initialized = true;
+    std::string topic_name;
+    RCLCPP_INFO(get_node()->get_logger(), "Namespace: %s",
+                get_node()->get_namespace());
     // append namespace to robot_description topic
-    const std::string topic_name =
-        std::string(get_node()->get_namespace()) + "robot_description";
+    if (std::string(get_node()->get_namespace()).compare("/") == 0) {
+      topic_name = "robot_description";
+      RCLCPP_INFO(get_node()->get_logger(), "A");
+
+    } else {
+      topic_name =
+          std::string(get_node()->get_namespace()) + "/robot_description";
+      RCLCPP_INFO(get_node()->get_logger(), "B");
+    }
     // create shared pointer to robot description
     auto robot_description_ptr = std::make_shared<std::string>();
     auto robot_description_listener =

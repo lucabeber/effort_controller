@@ -2,10 +2,6 @@
 
 This controller implements a catesian impedance controller which take a desired pose and a desired force in the cartesian frame.
 
-
-
-
-
 ## Example Configuration
 Below is an example `controller_manager.yaml` for a controller specific configuration.
 ```yaml

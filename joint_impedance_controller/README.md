@@ -1,10 +1,6 @@
-# Catesian Impedance Controller
+# Joint Impedance Controller
 
-This controller implements a catesian impedance controller which take a desired pose and a desired force in the cartesian frame.
-
-
-
-
+This controller implements a joint impedance controller which take a desired pose and a desired force in the cartesian frame. It uses inverse kinematics to calculate the desired joint positions and then it calculates the desired torques to apply to the joints.
 
 ## Example Configuration
 Below is an example `controller_manager.yaml` for a controller specific configuration.
