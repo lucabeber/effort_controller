@@ -8,6 +8,7 @@
 #include "cbf_qp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 namespace cbf_cartesian_impedance_controller {
 
 class CBFCartesianImpedanceController
@@ -52,7 +53,9 @@ class CBFCartesianImpedanceController
       m_target_wrench_subscriber;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
       m_target_frame_subscriber;
-  KDL::Frame m_target_frame;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
+      m_logger_publisher;
+  KDL::Frame m_target_frame, m_old_target_frame, m_filtered_target;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
   KDL::Frame m_ft_sensor_transform;
@@ -67,6 +70,7 @@ class CBFCartesianImpedanceController
   ctrl::Vector3D m_old_rot_error;
   ctrl::VectorND m_old_vel_error;
   double const m_alpha = 0.3;
+  rclcpp::Time m_last_time;
 };
 
 }  // namespace cbf_cartesian_impedance_controller

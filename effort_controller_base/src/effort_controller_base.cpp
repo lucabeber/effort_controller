@@ -126,8 +126,9 @@ EffortControllerBase::on_configure(
   RCLCPP_WARN_STREAM(get_node()->get_logger(), "Gravity compensation set to "
                                                    << std::boolalpha
                                                    << m_compensate_gravity);
-  RCLCPP_WARN_STREAM(get_node()->get_logger(),
-                     "Coriolis compensation set to " << m_compensate_coriolis);
+  RCLCPP_WARN_STREAM(get_node()->get_logger(), "Coriolis compensation set to "
+                                                   << std::boolalpha
+                                                   << m_compensate_coriolis);
   // // Get delta tau maximum
   m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
   if (m_delta_tau_max < 1.0) {

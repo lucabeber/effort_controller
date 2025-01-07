@@ -110,6 +110,9 @@ CBFCartesianImpedanceController::on_configure(
           get_node()->get_name() + std::string("/target_frame"), 3,
           std::bind(&CBFCartesianImpedanceController::targetFrameCallback, this,
                     std::placeholders::_1));
+  m_logger_publisher =
+      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>("/cbf_log",
+                                                                     10);
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -128,7 +131,7 @@ CBFCartesianImpedanceController::on_activate(
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
   // Set the target frame to the current frame
-  m_target_frame = m_current_frame;
+  m_target_frame = m_old_target_frame = m_filtered_target = m_current_frame;
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_activate");
 
@@ -143,6 +146,7 @@ CBFCartesianImpedanceController::on_activate(
 
   m_target_wrench = ctrl::Vector6D::Zero();
 
+  m_last_time = get_node()->get_clock()->now();
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -183,8 +187,8 @@ ctrl::Vector6D CBFCartesianImpedanceController::computeMotionError() {
   // Transformation from target -> current corresponds to error = target -
   // current
   KDL::Frame error_kdl;
-  error_kdl.M = m_target_frame.M * m_current_frame.M.Inverse();
-  error_kdl.p = m_target_frame.p - m_current_frame.p;
+  error_kdl.M = m_filtered_target.M * m_current_frame.M.Inverse();
+  error_kdl.p = m_filtered_target.p - m_current_frame.p;
 
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
@@ -234,9 +238,31 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   ctrl::VectorND q_null_space = Base::m_simulated_joint_motion.data;
   std::vector<Eigen::Vector3d> n, p;
   n.push_back(Eigen::Vector3d::UnitZ());
-  p.push_back(Eigen::Vector3d::UnitZ() * 0.55);
+  p.push_back(Eigen::Vector3d::UnitZ() * 0.3);
 
-  cbf::cbfFilterReference(m_current_frame, m_target_frame, n, p);
+  // Eigen::Vector3d p_target = {m_target_frame.p.x(), m_target_frame.p.y(),
+  //                             m_target_frame.p.z()};
+  // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(),
+  //                             *get_node()->get_clock(), 300,
+  //                             "Target \n"
+  //                                 << p_target);
+  // Eigen::Vector3d p_ee = {m_current_frame.p.x(), m_current_frame.p.y(),
+  //                         m_current_frame.p.z()};
+  // RCLCPP_INFO_STREAM_THROTTLE(
+  //     get_node()->get_logger(), *get_node()->get_clock(), 300,
+  //     "Current distance to target: " << (p_ee - p[0]).norm());
+  auto current_time = get_node()->get_clock()->now();
+  double dt = (current_time - m_last_time).seconds();
+  double tmp = m_target_frame.p.z();
+  auto logs =
+      cbf::cbfFilterReference(m_filtered_target, m_current_frame,
+                              m_target_frame, m_old_target_frame, n, p, dt);
+  m_last_time = current_time;
+  logs.push_back(current_time.seconds());  // 5
+  logs.push_back(tmp);                     // 6
+  std_msgs::msg::Float64MultiArray msg;
+  msg.data = logs;
+  m_logger_publisher->publish(msg);
 
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
@@ -246,11 +272,11 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
       tau_ext(Base::m_joint_number);
 
   // Filter the velocity errorm_old_vel_error
-  q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
-  for (int i = 0; i < q_dot.size(); i++) {
-    q_dot(i) = std::round(q_dot(i) * 1000) / 1000;
-  }
-  m_old_vel_error = q_dot;
+  // q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
+  // for (int i = 0; i < q_dot.size(); i++) {
+  //   q_dot(i) = std::round(q_dot(i) * 1000) / 1000;
+  // }
+  // m_old_vel_error = q_dot;
 
   // Compute the stiffness and damping in the base link
   const auto base_link_stiffness =
