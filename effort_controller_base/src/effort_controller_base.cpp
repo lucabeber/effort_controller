@@ -432,9 +432,9 @@ void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND &tau) {
     m_efforts[i] +=
         std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
     if (std::abs(difference) > m_delta_tau_max) {
-      RCLCPP_WARN(get_node()->get_logger(),
-                  "Joint %s effort rate saturated, was: %f",
-                  m_joint_names[i].c_str(), tau[i]);
+      // RCLCPP_WARN(get_node()->get_logger(),
+      //             "Joint %s effort rate saturated, was: %f",
+      //             m_joint_names[i].c_str(), tau[i]);
     }
   }
 }

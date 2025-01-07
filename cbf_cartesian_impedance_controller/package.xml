@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cbf_cartesian_impedance_controller</name>
+  <version>0.0.0</version>
+  <description>The control barrier function cartesian_impedance_controller package</description>
+  <maintainer email="davide.nardi-1@unitn.it">Luca Beber</maintainer>
+  <license>BSD</license>
+  <author email="davide.nardi-1@unitn.it">Luca Beber</author>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>effort_controller_base</depend>
+  <depend>controller_interface</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <controller_interface plugin="${prefix}/cartesian_impedance_controller_plugin.xml" />
+  </export>
+</package>
