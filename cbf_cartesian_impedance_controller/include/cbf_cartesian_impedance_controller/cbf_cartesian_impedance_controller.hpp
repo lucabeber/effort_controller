@@ -5,9 +5,10 @@
 
 #include <controller_interface/controller_interface.hpp>
 
-#include "cbf_qp.hpp"
+#include "conic_cbf.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
+#include "planes_cbf.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
 namespace cbf_cartesian_impedance_controller {
 

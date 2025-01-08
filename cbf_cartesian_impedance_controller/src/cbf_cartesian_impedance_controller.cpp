@@ -236,30 +236,23 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
   ctrl::VectorND q_null_space = Base::m_simulated_joint_motion.data;
-  std::vector<Eigen::Vector3d> n, p;
-  n.push_back(Eigen::Vector3d::UnitZ());
-  p.push_back(Eigen::Vector3d::UnitZ() * 0.3);
 
-  // Eigen::Vector3d p_target = {m_target_frame.p.x(), m_target_frame.p.y(),
-  //                             m_target_frame.p.z()};
-  // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(),
-  //                             *get_node()->get_clock(), 300,
-  //                             "Target \n"
-  //                                 << p_target);
-  // Eigen::Vector3d p_ee = {m_current_frame.p.x(), m_current_frame.p.y(),
-  //                         m_current_frame.p.z()};
-  // RCLCPP_INFO_STREAM_THROTTLE(
-  //     get_node()->get_logger(), *get_node()->get_clock(), 300,
-  //     "Current distance to target: " << (p_ee - p[0]).norm());
   auto current_time = get_node()->get_clock()->now();
   double dt = (current_time - m_last_time).seconds();
-  double tmp = m_target_frame.p.z();
+
+  // filter position
+  std::vector<Eigen::Vector3d> n, p;
+  n.push_back(Eigen::Vector3d::UnitZ());
+  p.push_back(Eigen::Vector3d::UnitZ() * 0.4);
   auto logs =
-      cbf::cbfFilterReference(m_filtered_target, m_current_frame,
-                              m_target_frame, m_old_target_frame, n, p, dt);
+      planes_cbf::cbfPositionFilter(m_filtered_target, m_target_frame, n, p);
+
+  // set limits (radiants) from initial orientation
+  Eigen::Vector3d thetas(2.5, 2.5, 3.14);
+  logs =
+      conic_cbf::cbfOrientFilter(m_filtered_target, m_target_frame, thetas, dt);
   m_last_time = current_time;
-  logs.push_back(current_time.seconds());  // 5
-  logs.push_back(tmp);                     // 6
+  logs.push_back(current_time.seconds());  // 4
   std_msgs::msg::Float64MultiArray msg;
   msg.data = logs;
   m_logger_publisher->publish(msg);
