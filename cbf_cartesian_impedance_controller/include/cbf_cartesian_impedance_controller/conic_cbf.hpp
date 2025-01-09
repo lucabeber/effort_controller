@@ -16,12 +16,6 @@ Eigen::Matrix<real_t, 3, 3> skew(Eigen::Vector3d& omega) {
       omega(0), 0;
   return omega_skew;
 }
-Eigen::MatrixXd skew2(Eigen::Vector3d& omega) {
-  Eigen::MatrixXd omega_skew(3, 3);
-  omega_skew << 0, -omega(2), omega(1), omega(2), 0, -omega(0), -omega(1),
-      omega(0), 0;
-  return omega_skew;
-}
 
 // def h(R, e_i, theta_i):
 //     return e_i.T @ R @ e_i - np.cos(theta_i)
@@ -84,7 +78,13 @@ std::vector<double> cbfOrientFilter(KDL::Frame& filtered_target_frame,
 
   // fill A matrix
   for (int i = 0; i < n_constraints; ++i) {
-    Eigen::Vector3d e_i = Eigen::Vector3d::Unit(i);
+    // Eigen::Vector3d e_i = Eigen::Vector3d::Unit(i);
+
+    // createrot matrix from quaternion
+    Eigen::Quaterniond q(0, 1, 0, 0);
+    Eigen::MatrixXd e_i_rot = q.toRotationMatrix();
+    Eigen::Vector3d e_i = e_i_rot.col(i);
+
     A.row(i) = L_gh(R, e_i, thetas(i), gamma).transpose();
     A_lb(i) = -gamma * h(R, e_i, thetas(i));
   }
@@ -102,7 +102,7 @@ std::vector<double> cbfOrientFilter(KDL::Frame& filtered_target_frame,
   }
   // R = R @ expm(dt * skew(u))
   Eigen::Vector3d omega_opt(u(0), u(1), u(2));
-  Eigen::MatrixXd skew_u = skew2(omega_opt) * dt;
+  Eigen::MatrixXd skew_u = skew(omega_opt) * dt;
   Eigen::MatrixXd skew_u_exp = skew_u.exp();
   Eigen::MatrixXd R_opt = R;
   R_opt = R_opt * skew_u_exp;
