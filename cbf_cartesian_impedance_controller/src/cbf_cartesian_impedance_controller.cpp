@@ -244,13 +244,16 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   std::vector<Eigen::Vector3d> n, p;
   n.push_back(Eigen::Vector3d::UnitZ());
   p.push_back(Eigen::Vector3d::UnitZ() * 0.4);
-  auto logs =
-      planes_cbf::cbfPositionFilter(m_filtered_target, m_target_frame, n, p);
+  std::vector<double> logs;
+  // auto logs =
+  //     planes_cbf::cbfPositionFilter(m_filtered_target, m_target_frame, n, p);
 
   // set limits (radiants) from initial orientation
-  Eigen::Vector3d thetas(2.5, 2.5, 3.14);
-  logs =
-      conic_cbf::cbfOrientFilter(m_filtered_target, m_target_frame, thetas, dt);
+  Eigen::Vector3d thetas(0.4, 0.4, 0.4);
+  if (m_received_initial_frame) {
+    logs = conic_cbf::cbfOrientFilter(m_initial_frame, m_filtered_target,
+                                      m_target_frame, thetas, dt);
+  }
   m_last_time = current_time;
   logs.push_back(current_time.seconds());  // 4
   std_msgs::msg::Float64MultiArray msg;
@@ -342,6 +345,11 @@ void CBFCartesianImpedanceController::targetFrameCallback(
                      target->pose.orientation.z, target->pose.orientation.w),
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
+  if (!m_received_initial_frame) {
+    m_initial_frame = m_current_frame;
+    m_filtered_target = m_target_frame;
+    m_received_initial_frame = true;
+  }
 }
 }  // namespace cbf_cartesian_impedance_controller
 

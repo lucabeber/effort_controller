@@ -65,9 +65,7 @@ std::vector<double> cbfPositionFilter(KDL::Frame& filtered_target_frame,
   logs.push_back(filtered_target_frame.p.z());  // 0
   logs.push_back(u(2));                         // 1
   logs.push_back(error.p.z());                  // 2
-  std::cout << x[2] << std::endl;
-  std::cout << h(x, n[0], p[0]) << "\n---------" << std::endl;
-  logs.push_back(h(x, n[0], p[0]));  // 3
+  logs.push_back(h(x, n[0], p[0]));             // 3
   return logs;
 }
 

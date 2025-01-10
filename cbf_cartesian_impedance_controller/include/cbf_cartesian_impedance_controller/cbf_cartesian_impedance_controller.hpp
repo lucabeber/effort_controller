@@ -56,7 +56,8 @@ class CBFCartesianImpedanceController
       m_target_frame_subscriber;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
       m_logger_publisher;
-  KDL::Frame m_target_frame, m_old_target_frame, m_filtered_target;
+  KDL::Frame m_target_frame, m_old_target_frame, m_filtered_target,
+      m_initial_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
   KDL::Frame m_ft_sensor_transform;
@@ -72,6 +73,8 @@ class CBFCartesianImpedanceController
   ctrl::VectorND m_old_vel_error;
   double const m_alpha = 0.3;
   rclcpp::Time m_last_time;
+
+  bool m_received_initial_frame = false;
 };
 
 }  // namespace cbf_cartesian_impedance_controller
