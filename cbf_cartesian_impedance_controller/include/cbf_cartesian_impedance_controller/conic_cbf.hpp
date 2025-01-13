@@ -10,46 +10,45 @@ namespace conic_cbf {
 // conic barriers
 
 // skew matrix from vector omega
-Eigen::Matrix<real_t, 3, 3> skew(Eigen::Vector3d& omega) {
-  Eigen::Matrix<real_t, 3, 3> omega_skew;
+Eigen::Matrix3d skew(Eigen::Vector3d& omega) {
+  Eigen::Matrix3d omega_skew;
   omega_skew << 0, -omega(2), omega(1), omega(2), 0, -omega(0), -omega(1),
       omega(0), 0;
   return omega_skew;
 }
-
+double theta_from_matrix(Eigen::Matrix3d& R) {
+  return std::acos((R.trace() - 1) / 2);
+}
+// exponential map from vector omega
+Eigen::Matrix3d exp_map(Eigen::Vector3d& omega) {
+  double theta = omega.norm();
+  if (theta == 0) {
+    return Eigen::Matrix3d::Identity();
+  }
+  Eigen::Matrix3d omega_skew = skew(omega);
+  return Eigen::Matrix3d::Identity() + std::sin(theta) / theta * omega_skew +
+         (1 - std::cos(theta)) / (theta * theta) * omega_skew * omega_skew;
+}
+// logaritmic map from rotation matrix
+Eigen::Vector3d log_map(Eigen::Matrix3d& R) {
+  double theta = theta_from_matrix(R);
+  if (theta == 0) {
+    return Eigen::Vector3d::Zero();
+  }
+  Eigen::Matrix3d log_R = theta / (2 * std::sin(theta)) * (R - R.transpose());
+  return Eigen::Vector3d(log_R(2, 1), log_R(0, 2), log_R(1, 0));
+}
 // # Define the CBF
-// def h(R, e_w, e_i, theta_i):
-//     return e_w.T @ R.T @ e_i - np.cos(theta_i)
-inline double h(Eigen::Matrix<real_t, 3, 3>& R, Eigen::Vector3d& e_w,
+inline double h(Eigen::Matrix3d& R, Eigen::Vector3d& e_w,
                 Eigen::Vector3d& e_ref, double theta_i) {
   return e_w.transpose() * R.transpose() * e_ref - std::cos(theta_i);
 }
 
 // # Define the CBF constraint
-// def cbf_constraint(u, R, e_w, e_i, theta, alpha):
-//     # return -e_i.T @ R @ skew(e_i) @ u + alpha * h(R, e_i, theta)
-//     e_w_skew = skew(e_w)
-//     h_val = h(R, e_w, e_i, theta)
-//     return -e_i.T @ R @ e_w_skew @ u + alpha * h_val
-
 // lie derivative of h with respect to g
-inline Eigen::Vector3d L_gh(Eigen::Matrix<real_t, 3, 3>& R,
-                            Eigen::Vector3d& e_w, Eigen::Vector3d& e_ref) {
+inline Eigen::Vector3d L_gh(Eigen::Matrix3d& R, Eigen::Vector3d& e_w,
+                            Eigen::Vector3d& e_ref) {
   return -e_ref.transpose() * R * skew(e_w);
-}
-
-Eigen::Matrix<real_t, 3, 3> computeSkewSymmetric(
-    const Eigen::Matrix<real_t, 3, 3>& R_t,
-    const Eigen::Matrix<real_t, 3, 3>& R_t_minus_1, double delta_t) {
-  // Compute the relative rotation matrix (Delta R)
-  Eigen::Matrix<real_t, 3, 3> delta_R = R_t * R_t_minus_1.transpose();
-
-  // Compute the skew-symmetric matrix Omega
-  Eigen::Matrix<real_t, 3, 3> Omega =
-      (delta_R - Eigen::Matrix<real_t, 3, 3>::Identity()) / delta_t;
-
-  // Return the skew-symmetric matrix Omega
-  return Omega;
 }
 
 std::vector<double> cbfOrientFilter(KDL::Frame& ref_frame,
@@ -67,13 +66,20 @@ std::vector<double> cbfOrientFilter(KDL::Frame& ref_frame,
                                 qpOASES::HessianType::HST_IDENTITY);
   min_problem.setOptions(qpOptions);
 
-  Eigen::Matrix<real_t, 3, 3> R_ref(ref_frame.M.data);
-  Eigen::Matrix<real_t, 3, 3> R_new(target_frame.M.data);
-  Eigen::Matrix<real_t, 3, 3> R(filtered_target_frame.M.data);
-  // auto omega = computeSkewSymmetric(R_new, R, dt);
+  // orientation used to center the conic barrier
+  Eigen::Matrix3d R_ref(ref_frame.M.data);
+  // new target orientation
+  Eigen::Matrix3d R_new(target_frame.M.data);
+  // current target orientation
+  Eigen::Matrix3d R(filtered_target_frame.M.data);
+  Eigen::Matrix3d delta_R = R * R_new.transpose();
+  Eigen::Vector3d omega = log_map(delta_R);
   // extract omega from error
-  // Eigen::Vector3d u_nominal = {omega(2, 1), omega(0, 2), omega(1, 0)};
-  Eigen::Vector3d u_nominal = {1.0, 1.2, -0.3};
+  Eigen::Vector3d u_nominal = {omega(0), omega(1), omega(2)};
+  logs.push_back(u_nominal(0));  // 0
+  logs.push_back(u_nominal(1));  // 1
+  logs.push_back(u_nominal(2));  // 2
+  // Eigen::Vector3d u_nominal = {1.0, 1.2, -0.3};
   const Eigen::Vector<real_t, 3> g = -u_nominal;
 
   // constraints
@@ -106,14 +112,8 @@ std::vector<double> cbfOrientFilter(KDL::Frame& ref_frame,
   logs.push_back(u(0));  // 3
   logs.push_back(u(1));  // 4
   logs.push_back(u(2));  // 5
-  Eigen::MatrixXd skew_u = dt * skew(omega_opt);
-  Eigen::MatrixXd skew_u_exp = skew_u.exp();
-  Eigen::MatrixXd R_opt = R * skew_u_exp;
-
-  // Ensure the resulting matrix is still a valid rotation matrix (orthonormal)
-  // Eigen::JacobiSVD<Eigen::MatrixXd> svd(
-  //     R_opt, Eigen::ComputeFullU | Eigen::ComputeFullV);
-  // R_opt = svd.matrixU() * svd.matrixV().transpose();
+  Eigen::Vector3d angle = omega_opt * dt;
+  Eigen::Matrix3d R_opt = R * exp_map(angle);
 
   // filtered_target_frame.p = target_frame.p;
   double* kdlData = filtered_target_frame.M.data;

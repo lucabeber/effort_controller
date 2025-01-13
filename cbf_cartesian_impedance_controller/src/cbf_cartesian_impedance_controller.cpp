@@ -255,7 +255,7 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
                                       m_target_frame, thetas, dt);
   }
   m_last_time = current_time;
-  logs.push_back(current_time.seconds());  // 4
+  // logs.push_back(current_time.seconds());  // 4
   std_msgs::msg::Float64MultiArray msg;
   msg.data = logs;
   m_logger_publisher->publish(msg);
@@ -346,7 +346,7 @@ void CBFCartesianImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
   if (!m_received_initial_frame) {
-    m_initial_frame = m_current_frame;
+    m_initial_frame = m_target_frame;
     m_filtered_target = m_target_frame;
     m_received_initial_frame = true;
   }

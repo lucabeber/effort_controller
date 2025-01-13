@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 project(cbf_cartesian_impedance_controller)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_BUILD_TYPE Release)
 set(ADDITIONAL_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Wno-unused-parameter)
 add_compile_options(${ADDITIONAL_COMPILE_OPTIONS})
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
@@ -9,7 +10,6 @@ add_definitions(-DEIGEN_MPL2_ONLY)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(effort_controller_base REQUIRED)
-
 set(QPOASES_INSTALL_DIR ${CMAKE_BINARY_DIR}/qpoases_install)
 include(ExternalProject)
 ExternalProject_Add(
