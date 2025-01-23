@@ -1,16 +1,16 @@
-#include "cbf_cartesian_impedance_controller/cbf_cartesian_impedance_controller.hpp"
+#include "hocbf_cartesian_impedance_controller/hocbf_cartesian_impedance_controller.hpp"
 
-#include "cbf_cartesian_impedance_controller/pseudo_inversion.h"
 #include "controller_interface/controller_interface.hpp"
 #include "effort_controller_base/Utility.h"
+#include "hocbf_cartesian_impedance_controller/pseudo_inversion.h"
 
-namespace cbf_cartesian_impedance_controller {
+namespace hocbf_cartesian_impedance_controller {
 
-CBFCartesianImpedanceController::CBFCartesianImpedanceController()
+HOCBFCartesianImpedanceController::HOCBFCartesianImpedanceController()
     : Base::EffortControllerBase() {}
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CBFCartesianImpedanceController::on_init() {
+HOCBFCartesianImpedanceController::on_init() {
   const auto ret = Base::on_init();
   if (ret != rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
                  CallbackReturn::SUCCESS) {
@@ -35,7 +35,7 @@ CBFCartesianImpedanceController::on_init() {
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CBFCartesianImpedanceController::on_configure(
+HOCBFCartesianImpedanceController::on_configure(
     const rclcpp_lifecycle::State &previous_state) {
   const auto ret = Base::on_configure(previous_state);
   if (ret != rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -95,21 +95,21 @@ CBFCartesianImpedanceController::on_configure(
   m_target_wrench_subscriber =
       get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
           get_node()->get_name() + std::string("/target_wrench"), 10,
-          std::bind(&CBFCartesianImpedanceController::targetWrenchCallback,
+          std::bind(&HOCBFCartesianImpedanceController::targetWrenchCallback,
                     this, std::placeholders::_1));
 
   // m_ft_sensor_wrench_subscriber =
   //   get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
   //     get_node()->get_name() + std::string("/ft_sensor_wrench"),
   //     10,
-  //     std::bind(&CBFCartesianImpedanceController::ftSensorWrenchCallback,
+  //     std::bind(&HOCBFCartesianImpedanceController::ftSensorWrenchCallback,
   //     this, std::placeholders::_1));
 
   m_target_frame_subscriber =
       get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
           get_node()->get_name() + std::string("/target_frame"), 3,
-          std::bind(&CBFCartesianImpedanceController::targetFrameCallback, this,
-                    std::placeholders::_1));
+          std::bind(&HOCBFCartesianImpedanceController::targetFrameCallback,
+                    this, std::placeholders::_1));
   m_logger_publisher =
       get_node()->create_publisher<std_msgs::msg::Float64MultiArray>("/cbf_log",
                                                                      10);
@@ -120,7 +120,7 @@ CBFCartesianImpedanceController::on_configure(
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CBFCartesianImpedanceController::on_activate(
+HOCBFCartesianImpedanceController::on_activate(
     const rclcpp_lifecycle::State &previous_state) {
   Base::on_activate(previous_state);
 
@@ -131,7 +131,7 @@ CBFCartesianImpedanceController::on_activate(
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
   // Set the target frame to the current frame
-  m_target_frame = m_old_target_frame = m_filtered_target = m_current_frame;
+  m_target_frame = m_old_target_frame = m_current_frame;
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_activate");
 
@@ -152,7 +152,7 @@ CBFCartesianImpedanceController::on_activate(
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CBFCartesianImpedanceController::on_deactivate(
+HOCBFCartesianImpedanceController::on_deactivate(
     const rclcpp_lifecycle::State &previous_state) {
   // Stop drifting by sending zero joint velocities
   Base::computeJointEffortCmds(ctrl::Vector6D::Zero());
@@ -164,7 +164,7 @@ CBFCartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CBFCartesianImpedanceController::update(
+controller_interface::return_type HOCBFCartesianImpedanceController::update(
     const rclcpp::Time &time, const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
@@ -181,14 +181,14 @@ controller_interface::return_type CBFCartesianImpedanceController::update(
   return controller_interface::return_type::OK;
 }
 
-ctrl::Vector6D CBFCartesianImpedanceController::computeMotionError() {
+ctrl::Vector6D HOCBFCartesianImpedanceController::computeMotionError() {
   // Compute the cartesian error between the current and the target frame
 
   // Transformation from target -> current corresponds to error = target -
   // current
   KDL::Frame error_kdl;
-  error_kdl.M = m_filtered_target.M * m_current_frame.M.Inverse();
-  error_kdl.p = m_filtered_target.p - m_current_frame.p;
+  error_kdl.M = m_target_frame.M * m_current_frame.M.Inverse();
+  error_kdl.p = m_target_frame.p - m_current_frame.p;
 
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
@@ -218,7 +218,7 @@ ctrl::Vector6D CBFCartesianImpedanceController::computeMotionError() {
   return error;
 }
 
-ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
+ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
@@ -245,34 +245,25 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   n.push_back(Eigen::Vector3d::UnitZ());
   p.push_back(Eigen::Vector3d::UnitZ() * 0.4);
 
-  // plane at y = 0.1 and -0.1
-  Eigen::Vector3d plane(0.0, 1.0, 0.0);
-  Eigen::Vector3d point(0.0, -0.1, 0.0);
+  // // plane at y = 0.1 and -0.1
+  // Eigen::Vector3d plane(0.0, 1.0, 0.0);
+  // Eigen::Vector3d point(0.0, -0.1, 0.0);
 
-  n.push_back(plane);
-  p.push_back(point);
+  // n.push_back(plane);
+  // p.push_back(point);
 
-  plane << 0.0, -1.0, 0.0;
-  point << 0.0, 0.1, 0.0;
+  // plane << 0.0, -1.0, 0.0;
+  // point << 0.0, 0.1, 0.0;
 
-  n.push_back(plane);
-  p.push_back(point);
-
-  std::vector<double> logs;
-  auto logs1 =
-      planes_cbf::cbfPositionFilter(m_filtered_target, m_target_frame, n, p);
+  // n.push_back(plane);
+  // p.push_back(point);
 
   // set limits (radiants) from initial orientation
-  Eigen::Vector3d thetas(0.4, 0.4, 0.4);
-  if (m_received_initial_frame) {
-    logs = conic_cbf::cbfOrientFilter(m_initial_frame, m_filtered_target,
-                                      m_target_frame, thetas, dt);
-  }
-  m_last_time = current_time;
-  // logs.push_back(current_time.seconds());  // 4
-  std_msgs::msg::Float64MultiArray msg;
-  msg.data = logs;
-  m_logger_publisher->publish(msg);
+  // Eigen::Vector3d thetas(0.4, 0.4, 0.4);
+  // if (m_received_initial_frame) {
+  //   logs = conic_cbf::cbfOrientFilter(m_initial_frame, m_filtered_target,
+  //                                     m_target_frame, thetas, dt);
+  // }
 
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
@@ -298,6 +289,11 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   tau_task = jac.transpose() * (base_link_stiffness * motion_error -
                                 (base_link_damping * (jac * q_dot)));
 
+  RCLCPP_INFO_STREAM_THROTTLE(
+      get_node()->get_logger(), *get_node()->get_clock(), 1000,
+      "motion_error xyz: " << motion_error.head<3>().norm()
+                           << " rpy: " << motion_error.tail<3>().norm());
+
   // Compute the null space torque
   q_null_space = m_q_starting_pose;
   tau_null = (m_identity - jac.transpose() * jac_tran_pseudo_inverse) *
@@ -307,24 +303,44 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
-  ctrl::VectorND tau = tau_task + tau_null + tau_ext;
+  ctrl::VectorND tau_nominal = tau_task + tau_null + tau_ext;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
 
+  KDL::JntSpaceInertiaMatrix inertia_matrix(Base::m_joint_number);
+  m_dyn_solver->JntToMass(Base::m_joint_positions, inertia_matrix);
+
+  Eigen::MatrixXd Lambda =
+      (jac * inertia_matrix.data * jac.transpose()).inverse();
+
+  auto logs = planes_hocbf::hocbfPositionFilter(
+      tau_nominal, Lambda, jac, tau_coriolis.data, m_target_frame,
+      m_current_frame, dt, n, p);
+  m_last_time = current_time;
+  // logs.push_back(current_time.seconds());  // 4
+
+  logs.push_back(p[0][2]);
+  logs.push_back(m_current_frame.p.z());
+  logs.push_back(m_target_frame.p.z());
+  std_msgs::msg::Float64MultiArray msg;
+  msg.data = logs;
+  m_logger_publisher->publish(msg);
+
   if (m_compensate_gravity) {
     Base::m_dyn_solver->JntToGravity(Base::m_joint_positions, tau_gravity);
-    tau = tau + tau_gravity.data;
+    tau_nominal = tau_nominal + tau_gravity.data;
   }
   if (m_compensate_coriolis) {
     Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions,
                                       Base::m_joint_velocities, tau_coriolis);
-    tau = tau + tau_coriolis.data;
+    tau_nominal = tau_nominal + tau_coriolis.data;
   }
-  return tau;
+  // std::cout << "tau_nominal: " << tau_nominal.transpose() << std::endl;
+  return tau_nominal;
 }
 
-void CBFCartesianImpedanceController::targetWrenchCallback(
+void HOCBFCartesianImpedanceController::targetWrenchCallback(
     const geometry_msgs::msg::WrenchStamped::SharedPtr wrench) {
   // Parse the target wrench
   m_target_wrench[0] = wrench->wrench.force.x;
@@ -342,7 +358,7 @@ void CBFCartesianImpedanceController::targetWrenchCallback(
   }
 }
 
-void CBFCartesianImpedanceController::targetFrameCallback(
+void HOCBFCartesianImpedanceController::targetFrameCallback(
     const geometry_msgs::msg::PoseStamped::SharedPtr target) {
   if (target->header.frame_id != Base::m_robot_base_link) {
     auto &clock = *get_node()->get_clock();
@@ -361,15 +377,14 @@ void CBFCartesianImpedanceController::targetFrameCallback(
                              target->pose.position.z));
   if (!m_received_initial_frame) {
     m_initial_frame = m_target_frame;
-    m_filtered_target = m_target_frame;
     m_received_initial_frame = true;
   }
 }
-}  // namespace cbf_cartesian_impedance_controller
+}  // namespace hocbf_cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>
 
 PLUGINLIB_EXPORT_CLASS(
-    cbf_cartesian_impedance_controller::CBFCartesianImpedanceController,
+    hocbf_cartesian_impedance_controller::HOCBFCartesianImpedanceController,
     controller_interface::ControllerInterface)

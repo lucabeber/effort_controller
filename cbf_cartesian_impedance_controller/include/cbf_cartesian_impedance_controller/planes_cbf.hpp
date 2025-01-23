@@ -20,11 +20,13 @@ std::vector<double> cbfPositionFilter(KDL::Frame& filtered_target_frame,
   qpOASES::Options qpOptions;
   qpOptions.printLevel = qpOASES::PL_LOW;
   const int n_constraints = n.size();
+  std::cout << "n_constraints: " << n_constraints << std::endl;
   // gamma = 1.0 is the optimal value that reduces the constraint to n.T u >=
   // n.T (x - p) which is geometrically correct
   const double gamma = 1.0;
   // setup problem, Hessian is identity
-  qpOASES::QProblem min_problem(3, 1, qpOASES::HessianType::HST_IDENTITY);
+  qpOASES::QProblem min_problem(3, n_constraints,
+                                qpOASES::HessianType::HST_IDENTITY);
   min_problem.setOptions(qpOptions);
 
   // compute u nominal as
