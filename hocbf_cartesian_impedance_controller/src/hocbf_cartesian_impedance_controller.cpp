@@ -217,6 +217,24 @@ ctrl::Vector6D HOCBFCartesianImpedanceController::computeMotionError() {
 
   return error;
 }
+ctrl::Vector6D HOCBFCartesianImpedanceController::computePositionError() {
+  KDL::Frame error_kdl;
+  error_kdl.p = m_target_frame.p - m_current_frame.p;
+  ctrl::Vector6D error;
+  error.head<3>() << error_kdl.p.x(), error_kdl.p.y(), error_kdl.p.z();
+  error.tail<3>() << 0.0, 0.0, 0.0;
+  return error;
+}
+ctrl::Vector6D HOCBFCartesianImpedanceController::computeOrientationError() {
+  KDL::Frame error_kdl;
+  error_kdl.M = m_target_frame.M * m_current_frame.M.Inverse();
+  KDL::Vector rot_axis = KDL::Vector::Zero();
+  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  ctrl::Vector6D error;
+  error.head<3>() << 0.0, 0.0, 0.0;
+  error.tail<3>() << rot_axis(0), rot_axis(1), rot_axis(2);
+  return error;
+}
 
 ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   // Compute the forward kinematics
@@ -295,15 +313,15 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
                            << " rpy: " << motion_error.tail<3>().norm());
 
   // Compute the null space torque
-  q_null_space = m_q_starting_pose;
-  tau_null = (m_identity - jac.transpose() * jac_tran_pseudo_inverse) *
-             (m_null_space_stiffness * (-q + q_null_space) -
-              m_null_space_damping * q_dot);
+  // q_null_space = m_q_starting_pose;
+  // tau_null = (m_identity - jac.transpose() * jac_tran_pseudo_inverse) *
+  //            (m_null_space_stiffness * (-q + q_null_space) -
+  //             m_null_space_damping * q_dot);
 
-  // Compute the torque to achieve the desired force
-  tau_ext = jac.transpose() * m_target_wrench;
+  // // Compute the torque to achieve the desired force
+  // tau_ext = jac.transpose() * m_target_wrench;
 
-  ctrl::VectorND tau_nominal = tau_task + tau_null + tau_ext;
+  ctrl::VectorND tau_nominal = tau_task;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
@@ -314,9 +332,12 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   Eigen::MatrixXd Lambda =
       (jac * inertia_matrix.data * jac.transpose()).inverse();
 
-  auto logs = planes_hocbf::hocbfPositionFilter(
-      tau_nominal, Lambda, jac, tau_coriolis.data, m_target_frame,
-      m_current_frame, dt, n, p);
+  // compute ee velocity using jacobian
+  Eigen::VectorXd dot_x = jac * q_dot;
+
+  std::vector<double> logs = planes_hocbf::hocbfPositionFilter(
+      tau_nominal, Lambda, jac, tau_coriolis.data, m_current_frame, dot_x, dt,
+      n, p);
   m_last_time = current_time;
   // logs.push_back(current_time.seconds());  // 4
 

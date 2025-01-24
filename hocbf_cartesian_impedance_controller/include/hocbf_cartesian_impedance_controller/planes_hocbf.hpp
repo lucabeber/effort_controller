@@ -5,82 +5,105 @@
 namespace planes_hocbf {
 
 // control barrier function that ensures that the robot stays above a plane
-double h(const Eigen::VectorXd& x, const Eigen::VectorXd& n,
-         const Eigen::VectorXd& p) {
+double h(const Eigen::Vector3d& x, const Eigen::Vector3d& n,
+         const Eigen::Vector3d& p) {
   return n.dot(x - p);
 }
 
-double dot_h(const Eigen::VectorXd& dot_x1, const Eigen::VectorXd& n) {
+double dot_h(const Eigen::Vector3d& dot_x1, const Eigen::Vector3d& n) {
   return n.dot(dot_x1);
 }
-double ddot_h(const Eigen::VectorXd& dot_x2, const Eigen::VectorXd& n) {
+double ddot_h(const Eigen::Vector3d& dot_x2, const Eigen::Vector3d& n) {
   return n.dot(dot_x2);
 }
+// full hocbf debug function
+// double log_psi_2_quadratic(const Eigen::Vector3d& tau_nominal,
+//                            const Eigen::MatrixXd& Lambda,
+//                            const Eigen::MatrixXd& J, const Eigen::VectorXd&
+//                            mu, const Eigen::Vector3d& x_des, const
+//                            Eigen::Vector3d& x, const Eigen::Vector3d& dot_x1,
+//                            double dt, const Eigen::Vector3d& n, const
+//                            Eigen::Vector3d& p) {
+//   // void(mu);
+//   Eigen::MatrixXd J_tran_pinv;
+//   pseudoInverse(J.transpose(), &J_tran_pinv);
+//   // ignore coriolis and gravity, and setting Lambda_des = Lambda cancels out
+//   // F^{ext}
+//   Eigen::Vector3d dot_x2 =
+//       (-Lambda.inverse() * J_tran_pinv * tau_nominal).head(3);
+//   const double h_ = h(x, n, p);
+//   const double dot_h_ = dot_h(dot_x1, n);
+//   const double ddot_h_ = ddot_h(dot_x2, n);
+//   return ddot_h_ + 2 * dot_h_ * h_ + std::pow(dot_h_, 2) + std::pow(h_, 4) +
+//          2 * dot_h_ * pow(h_, 2);
+// }
+// psi_2 b vector
+// double quadratic_psi2_b(const Eigen::MatrixXd& Lambda,
+//                         const Eigen::VectorXd& mu, const Eigen::Vector3d& x,
+//                         const Eigen::Vector3d& dot_x, const Eigen::Vector3d&
+//                         n, const Eigen::Vector3d& p) {
+//   const double h_ = h(x, n, p);
+//   const double dot_h_ = dot_h(dot_x, n);
+//   return -2 * dot_h_ * h_ - std::pow(dot_h_, 2) - std::pow(h_, 4) -
+//          2 * dot_h_ * pow(h_, 2);
+// }
 
-// full hocbf
-double psi_2(const Eigen::Vector3d& tau_nominal, const Eigen::MatrixXd& Lambda,
-             const Eigen::MatrixXd& J, const Eigen::VectorXd& mu,
-             const Eigen::Vector3d& x_des, const Eigen::Vector3d& x, double dt,
-             const Eigen::Vector3d& n, const Eigen::Vector3d& p) {
-  // void(mu);
+double log_psi2_linear(const Eigen::VectorXd& tau_nominal,
+                       const Eigen::MatrixXd& Lambda, const Eigen::MatrixXd& J,
+                       const Eigen::VectorXd& mu, const Eigen::Vector3d& x,
+                       const Eigen::Vector3d& dot_x1, const Eigen::Vector3d& n,
+                       const Eigen::Vector3d& p, const double k) {
   Eigen::MatrixXd J_tran_pinv;
   pseudoInverse(J.transpose(), &J_tran_pinv);
-  // ignore coriolis and gravity, and setting Lambda_des = Lambda cancels out
-  // F^{ext}
+  // ignore coriolis and gravity,
+  //     and setting Lambda_des =
+  //         Lambda cancels out F ^ { ext }
   Eigen::Vector3d dot_x2 =
-      (-Lambda.inverse() * J_tran_pinv * tau_nominal).head(3);
-  Eigen::Vector3d dot_x1 = (x_des - x) / dt;
+      (Lambda.inverse() * J_tran_pinv * tau_nominal).head(3);
   const double h_ = h(x, n, p);
   const double dot_h_ = dot_h(dot_x1, n);
   const double ddot_h_ = ddot_h(dot_x2, n);
-  return ddot_h_ + 2 * dot_h_ * h_ + std::pow(dot_h_, 2) + std::pow(h_, 4) +
-         2 * dot_h_ * pow(h_, 2);
-}
-// psi_2 A matrix
-Eigen::MatrixXd psi2_A(const Eigen::MatrixXd& Lambda, const Eigen::Vector3d n) {
-  return -n.transpose() * Lambda.inverse().block(0, 0, 3, 3);
-}
-// psi_2 b vector
-double psi2_b(const Eigen::MatrixXd& Lambda, const Eigen::VectorXd& mu,
-              const Eigen::Vector3d& x_des, const Eigen::Vector3d& x, double dt,
-              const Eigen::Vector3d& n, const Eigen::Vector3d& p) {
-  Eigen::Vector3d dot_x1 = (x_des - x) / dt;
-  const double h_ = h(x, n, p);
-  const double dot_h_ = dot_h(dot_x1, n);
-  return -2 * dot_h_ * h_ - std::pow(dot_h_, 2) - std::pow(h_, 4) -
-         2 * dot_h_ * pow(h_, 2);
+  return ddot_h_ + k * dot_h_ + k * std::sqrt(dot_h_ + k * h_);
 }
 
-std::vector<double> hocbfPositionFilter(
-    Eigen::VectorXd& tau_nominal, const Eigen::MatrixXd& Lambda,
-    const Eigen::MatrixXd& J, Eigen::VectorXd& mu,
-    const KDL::Frame& target_frame, const KDL::Frame& current_frame, double dt,
-    const std::vector<Eigen::Vector3d>& n,
-    const std::vector<Eigen::Vector3d>& p) {
+// psi_2 A matrix
+Eigen::Vector3d psi2_A(const Eigen::MatrixXd& Lambda, const Eigen::Vector3d n) {
+  Eigen::MatrixXd Lambda_inv = Lambda.inverse();
+  return n.transpose() * Lambda_inv.block(0, 0, 3, 3);
+  // auto Lambda_inv = Lambda.inverse();
+  // return n.dot(Lambda_inv.block(0, 0, 3, 3));
+}
+double linear_psi2_b(const Eigen::MatrixXd& Lambda, const Eigen::VectorXd& mu,
+                     const Eigen::Vector3d& x, const Eigen::Vector3d& dot_x,
+                     const Eigen::Vector3d& n, const Eigen::Vector3d& p,
+                     const double k) {
+  const double h_ = h(x, n, p);
+  const double dot_h_ = dot_h(dot_x, n);
+  return -k * dot_h_ - k * std::sqrt(dot_h_ + k * h_);
+}
+
+std::vector<double> hocbfPositionFilter(Eigen::VectorXd& tau_nominal,
+                                        const Eigen::MatrixXd& Lambda,
+                                        const Eigen::MatrixXd& J,
+                                        const Eigen::VectorXd& mu,
+                                        const KDL::Frame& current_frame,
+                                        const Eigen::Vector3d& dot_x, double dt,
+                                        const std::vector<Eigen::Vector3d>& n,
+                                        const std::vector<Eigen::Vector3d>& p) {
   std::vector<double> logs;
   // setup problem
   qpOASES::Options qpOptions;
   qpOptions.printLevel = qpOASES::PL_LOW;
   const int n_constraints = n.size();
-  // gamma = 1.0 is the optimal value that reduces the constraint to n.T u >=
-  // n.T (x - p) which is geometrically correct
-  const double gamma = 1.0;
   // setup problem, Hessian is identity
   qpOASES::QProblem min_problem(3, n_constraints,
                                 qpOASES::HessianType::HST_IDENTITY);
   min_problem.setOptions(qpOptions);
 
-  // compute u nominal as
-  // KDL::Frame error;
-  // error.p = target_frame.p - filtered_target_frame.p;
-
-  Eigen::Vector3d x_des(target_frame.p.x(), target_frame.p.y(),
-                        target_frame.p.z());
+  const double k = 0.1;
   Eigen::Vector3d x(current_frame.p.x(), current_frame.p.y(),
                     current_frame.p.z());
 
-  // double psi_2_ = psi_2(tau_nominal, Lambda, J, mu, x_des, x, dt, n[0],
-  // p[0]);
   Eigen::MatrixXd J_tran_pinv;
   pseudoInverse(J.transpose(), &J_tran_pinv);
 
@@ -88,11 +111,16 @@ std::vector<double> hocbfPositionFilter(
 
   Eigen::Vector<real_t, 3> u_nominal = {F_u(0), F_u(1), F_u(2)};
   Eigen::Vector<real_t, 3> g = -u_nominal;
-  Eigen::Matrix<real_t, Eigen::Dynamic, 3, Eigen::RowMajor> A =
-      psi2_A(Lambda, n[0]);
-  Eigen::Vector<real_t, Eigen::Dynamic> A_lb(n_constraints);
+  Eigen::Matrix<real_t, Eigen::Dynamic, 3, Eigen::RowMajor> A(n_constraints, 3);
   for (int i = 0; i < n_constraints; ++i) {
-    A_lb(i) = psi2_b(Lambda, mu, x_des, x, dt, n[i], p[i]);
+    A.row(i) = psi2_A(Lambda, n[i]);
+  }
+  Eigen::Vector<real_t, Eigen::Dynamic> A_lb(n_constraints);
+
+  for (int i = 0; i < n_constraints; ++i) {
+    // A_lb(i) = quadratic_psi2_b(Lambda, mu, x_des, x, n[i], p[i]);
+    // A_lb(i) = 0.0;
+    linear_psi2_b(Lambda, mu, x, dot_x, n[i], p[i], k);
   }
   int nWSR = 200;
 
@@ -106,11 +134,28 @@ std::vector<double> hocbfPositionFilter(
               << std::endl;
     exit(1);
   }
-  tau_nominal = J.transpose() * F_u_star;
+  // add missing wrench components
+  Eigen::Vector<double, 6> F_u_tot{F_u_star(0), F_u_star(1), F_u_star(2),
+                                   F_u(3),      F_u(4),      F_u(5)};
 
-  logs.push_back(psi_2(tau_nominal, Lambda, J, mu, x_des, x, dt, n[0], p[0]));
+  Eigen::Vector<double, 6> tau_tmp = tau_nominal;
+  tau_nominal = J.transpose() * F_u_tot;
+  std::cout << "tau_error: " << (tau_nominal - tau_tmp).transpose()
+            << std::endl;
+  // std::cout << "tau_nominal: " << tau_nominal.transpose() << std::endl;
+  // std::cout << "Lambda: " << Lambda << std::endl;
+  // std::cout << "J: " << J << std::endl;
+  // std::cout << "mu: " << mu.transpose() << std::endl;
+  // std::cout << "x: " << x.transpose() << std::endl;
+  // std::cout << "dot_x: " << dot_x.transpose() << std::endl;
+  // std::cout << "n: " << n[0].transpose() << std::endl;
+  // std::cout << "p: " << p[0].transpose() << std::endl;
+  // std::cout << "k: " << k << std::endl;
+
+  double psi_2 =
+      log_psi2_linear(tau_nominal, Lambda, J, mu, x, dot_x, n[0], p[0], k);
+  logs.push_back(psi_2);
   return logs;
 }
-
 }  // namespace planes_hocbf
 #endif  // PLANES_CBF_QP_HPP

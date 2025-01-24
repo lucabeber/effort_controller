@@ -49,6 +49,8 @@ class HOCBFCartesianImpedanceController
   void targetFrameCallback(
       const geometry_msgs::msg::PoseStamped::SharedPtr target);
   ctrl::Vector6D computeMotionError();
+  ctrl::Vector6D computePositionError();
+  ctrl::Vector6D computeOrientationError();
 
   rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
       m_target_wrench_subscriber;

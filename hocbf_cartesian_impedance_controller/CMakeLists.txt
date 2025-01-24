@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 project(hocbf_cartesian_impedance_controller)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_BUILD_TYPE Release)
+# set(CMAKE_BUILD_TYPE Release)
 set(ADDITIONAL_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Wno-unused-parameter)
 add_compile_options(${ADDITIONAL_COMPILE_OPTIONS})
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
