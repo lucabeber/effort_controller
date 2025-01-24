@@ -10,6 +10,7 @@ add_definitions(-DEIGEN_MPL2_ONLY)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(effort_controller_base REQUIRED)
+find_package(visualization_msgs REQUIRED)
 set(QPOASES_INSTALL_DIR ${CMAKE_BINARY_DIR}/qpoases_install)
 include(ExternalProject)
 ExternalProject_Add(
@@ -35,6 +36,7 @@ add_library(qpoases::qpoases ALIAS qpoases_helper)
 set(THIS_PACKAGE_INCLUDE_DEPENDS
         rclcpp
         effort_controller_base
+        visualization_msgs
         Eigen3
 )
 

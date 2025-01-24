@@ -114,6 +114,13 @@ CBFCartesianImpedanceController::on_configure(
       get_node()->create_publisher<std_msgs::msg::Float64MultiArray>("/cbf_log",
                                                                      10);
 
+  m_marker_pub = get_node()->create_publisher<visualization_msgs::msg::MarkerArray>(
+      "visualization_marker", 1);
+  // enable shared memory
+  m_visualizer =
+      std::make_shared<Visualizer>(m_marker_pub, Base::m_robot_base_link, 1.0);
+
+
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -164,8 +171,9 @@ CBFCartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CBFCartesianImpedanceController::update(
-    const rclcpp::Time &time, const rclcpp::Duration &period) {
+controller_interface::return_type
+CBFCartesianImpedanceController::update(const rclcpp::Time &time,
+                                        const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -193,7 +201,7 @@ ctrl::Vector6D CBFCartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -241,26 +249,37 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   double dt = (current_time - m_last_time).seconds();
 
   // filter position
-  std::vector<Eigen::Vector3d> n, p;
-  n.push_back(Eigen::Vector3d::UnitZ());
-  p.push_back(Eigen::Vector3d::UnitZ() * 0.4);
+    std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> constraint_planes;
 
-  // plane at y = 0.1 and -0.1
+  constraint_planes.push_back(std::make_pair(Eigen::Vector3d::UnitZ(), Eigen::Vector3d::UnitZ() * 0.3));
   Eigen::Vector3d plane(0.0, 1.0, 0.0);
-  Eigen::Vector3d point(0.0, -0.1, 0.0);
-
-  n.push_back(plane);
-  p.push_back(point);
-
+  Eigen::Vector3d point(0.0, -0.2, 0.0);
+  constraint_planes.push_back(std::make_pair(plane, point));
   plane << 0.0, -1.0, 0.0;
-  point << 0.0, 0.1, 0.0;
+  point << 0.0, 0.2, 0.0;
+  constraint_planes.push_back(std::make_pair(plane, point));
 
-  n.push_back(plane);
-  p.push_back(point);
+  std::vector<Eigen::Vector3d> n;
+  std::vector<Eigen::Vector3d> p;
+  for (size_t i = 0; i < constraint_planes.size(); i++) {
+    n.push_back(constraint_planes[i].first);
+    p.push_back(constraint_planes[i].second);
+  }
 
   std::vector<double> logs;
   auto logs1 =
       planes_cbf::cbfPositionFilter(m_filtered_target, m_target_frame, n, p);
+
+  // update every 0.02s
+  if (vis_iter == 0) {
+    Eigen::Vector3d target(m_target_frame.p.x(), m_target_frame.p.y(),
+                           m_target_frame.p.z());
+    Eigen::Vector3d filtered_target(m_filtered_target.p.x(),
+                                    m_filtered_target.p.y(),
+                                    m_filtered_target.p.z());
+    m_visualizer->draw_scene(constraint_planes, target, filtered_target, current_time, 0.015);
+  }
+  vis_iter = (vis_iter + 1) % 20;
 
   // set limits (radiants) from initial orientation
   Eigen::Vector3d thetas(0.4, 0.4, 0.4);
@@ -365,7 +384,7 @@ void CBFCartesianImpedanceController::targetFrameCallback(
     m_received_initial_frame = true;
   }
 }
-}  // namespace cbf_cartesian_impedance_controller
+} // namespace cbf_cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>
