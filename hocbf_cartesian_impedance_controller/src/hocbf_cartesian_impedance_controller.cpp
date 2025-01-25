@@ -114,6 +114,12 @@ HOCBFCartesianImpedanceController::on_configure(
       get_node()->create_publisher<std_msgs::msg::Float64MultiArray>("/cbf_log",
                                                                      10);
 
+  m_marker_pub =
+      get_node()->create_publisher<visualization_msgs::msg::MarkerArray>(
+          "visualization_marker", 1);
+  m_visualizer =
+      std::make_shared<Visualizer>(m_marker_pub, Base::m_robot_base_link, 2.0);
+
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -263,7 +269,7 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   n.push_back(Eigen::Vector3d::UnitZ());
   p.push_back(Eigen::Vector3d::UnitZ() * 0.4);
 
-  // // plane at y = 0.1 and -0.1
+  // plane at y = 0.1 and -0.1
   // Eigen::Vector3d plane(0.0, 1.0, 0.0);
   // Eigen::Vector3d point(0.0, -0.1, 0.0);
 
@@ -275,7 +281,20 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
 
   // n.push_back(plane);
   // p.push_back(point);
+  std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> constraint_planes;
 
+  for (size_t i = 0; i < n.size(); i++) {
+    constraint_planes.push_back(std::make_pair(n[i], p[i]));
+  }
+  if (m_vis_iter == 0) {
+    Eigen::Vector3d target(m_target_frame.p.x(), m_target_frame.p.y(),
+                           m_target_frame.p.z());
+    Eigen::Vector3d filtered_target(m_target_frame.p.x(), m_target_frame.p.y(),
+                                    m_target_frame.p.z());
+    m_visualizer->draw_scene(constraint_planes, target, filtered_target,
+                             current_time, 0.015);
+  }
+  m_vis_iter = (m_vis_iter + 1) % 10;
   // set limits (radiants) from initial orientation
   // Eigen::Vector3d thetas(0.4, 0.4, 0.4);
   // if (m_received_initial_frame) {
@@ -288,7 +307,7 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
 
   // Initialize the torque vectors
   ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number),
-      tau_ext(Base::m_joint_number);
+      tau_ext(Base::m_joint_number), tau(Base::m_joint_number);
 
   // Filter the velocity errorm_old_vel_error
   // q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
@@ -304,8 +323,8 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
       Base::displayInBaseLink(m_cartesian_damping, Base::m_end_effector_link);
 
   // Compute the task torque
-  tau_task = jac.transpose() * (base_link_stiffness * motion_error -
-                                (base_link_damping * (jac * q_dot)));
+  ctrl::Vector6D F_task = (base_link_stiffness * motion_error -
+                           (base_link_damping * (jac * q_dot)));
 
   RCLCPP_INFO_STREAM_THROTTLE(
       get_node()->get_logger(), *get_node()->get_clock(), 1000,
@@ -321,7 +340,7 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   // // Compute the torque to achieve the desired force
   // tau_ext = jac.transpose() * m_target_wrench;
 
-  ctrl::VectorND tau_nominal = tau_task;
+  Eigen::VectorXd F_u = F_task;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
@@ -333,13 +352,15 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
       (jac * inertia_matrix.data * jac.transpose()).inverse();
 
   // compute ee velocity using jacobian
-  Eigen::VectorXd dot_x = jac * q_dot;
+  Eigen::VectorXd dot_x = (jac * q_dot).head(3);
 
   std::vector<double> logs = planes_hocbf::hocbfPositionFilter(
-      tau_nominal, Lambda, jac, tau_coriolis.data, m_current_frame, dot_x, dt,
-      n, p);
+      F_u, Lambda, jac, tau_coriolis.data, m_current_frame, dot_x, dt, n, p);
   m_last_time = current_time;
   // logs.push_back(current_time.seconds());  // 4
+
+  tau_task = jac.transpose() * F_u;
+  tau = tau_task;
 
   logs.push_back(p[0][2]);
   logs.push_back(m_current_frame.p.z());
@@ -350,15 +371,15 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
 
   if (m_compensate_gravity) {
     Base::m_dyn_solver->JntToGravity(Base::m_joint_positions, tau_gravity);
-    tau_nominal = tau_nominal + tau_gravity.data;
+    tau = tau + tau_gravity.data;
   }
   if (m_compensate_coriolis) {
     Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions,
                                       Base::m_joint_velocities, tau_coriolis);
-    tau_nominal = tau_nominal + tau_coriolis.data;
+    tau = tau + tau_coriolis.data;
   }
   // std::cout << "tau_nominal: " << tau_nominal.transpose() << std::endl;
-  return tau_nominal;
+  return tau;
 }
 
 void HOCBFCartesianImpedanceController::targetWrenchCallback(

@@ -48,22 +48,20 @@ double ddot_h(const Eigen::Vector3d& dot_x2, const Eigen::Vector3d& n) {
 //          2 * dot_h_ * pow(h_, 2);
 // }
 
-double log_psi2_linear(const Eigen::VectorXd& tau_nominal,
+double log_psi2_linear(const Eigen::VectorXd& F_u,
                        const Eigen::MatrixXd& Lambda, const Eigen::MatrixXd& J,
                        const Eigen::VectorXd& mu, const Eigen::Vector3d& x,
                        const Eigen::Vector3d& dot_x1, const Eigen::Vector3d& n,
                        const Eigen::Vector3d& p, const double k) {
-  Eigen::MatrixXd J_tran_pinv;
-  pseudoInverse(J.transpose(), &J_tran_pinv);
   // ignore coriolis and gravity,
   //     and setting Lambda_des =
   //         Lambda cancels out F ^ { ext }
-  Eigen::Vector3d dot_x2 =
-      (Lambda.inverse() * J_tran_pinv * tau_nominal).head(3);
+  Eigen::Vector3d dot_x2 = (Lambda.inverse() * F_u).head(3);
   const double h_ = h(x, n, p);
   const double dot_h_ = dot_h(dot_x1, n);
   const double ddot_h_ = ddot_h(dot_x2, n);
-  return ddot_h_ + k * dot_h_ + k * std::sqrt(dot_h_ + k * h_);
+  // return ddot_h_ + k * dot_h_ + k * std::sqrt(dot_h_ + k * h_);
+  return ddot_h_ + 2 * k * dot_h_ + 2 * k * k * h_;
 }
 
 // psi_2 A matrix
@@ -79,10 +77,10 @@ double linear_psi2_b(const Eigen::MatrixXd& Lambda, const Eigen::VectorXd& mu,
                      const double k) {
   const double h_ = h(x, n, p);
   const double dot_h_ = dot_h(dot_x, n);
-  return -k * dot_h_ - k * std::sqrt(dot_h_ + k * h_);
+  return -2 * k * dot_h_ - k * k * h_;
 }
 
-std::vector<double> hocbfPositionFilter(Eigen::VectorXd& tau_nominal,
+std::vector<double> hocbfPositionFilter(Eigen::VectorXd& F_u,
                                         const Eigen::MatrixXd& Lambda,
                                         const Eigen::MatrixXd& J,
                                         const Eigen::VectorXd& mu,
@@ -100,17 +98,20 @@ std::vector<double> hocbfPositionFilter(Eigen::VectorXd& tau_nominal,
                                 qpOASES::HessianType::HST_IDENTITY);
   min_problem.setOptions(qpOptions);
 
-  const double k = 0.1;
+  const double k = 10.0;
   Eigen::Vector3d x(current_frame.p.x(), current_frame.p.y(),
                     current_frame.p.z());
+  // Eigen::MatrixXd J_tran_pinv;
+  // pseudoInverse(J.transpose(), &J_tran_pinv, false);
 
-  Eigen::MatrixXd J_tran_pinv;
-  pseudoInverse(J.transpose(), &J_tran_pinv);
+  // std::cout << "J_tran_pinv * J_tran = \n"
+  //           << (J_tran_pinv * J.transpose()) << std::endl;
+  // std::cout << "-----" << std::endl;
 
-  Eigen::VectorXd F_u = J_tran_pinv * tau_nominal;
+  // Eigen::VectorXd F_u = J_tran_pinv * tau_nominal;
 
-  Eigen::Vector<real_t, 3> u_nominal = {F_u(0), F_u(1), F_u(2)};
-  Eigen::Vector<real_t, 3> g = -u_nominal;
+  Eigen::Vector<real_t, 3> F_u_pos = {F_u(0), F_u(1), F_u(2)};
+  Eigen::Vector<real_t, 3> g = -F_u_pos;
   Eigen::Matrix<real_t, Eigen::Dynamic, 3, Eigen::RowMajor> A(n_constraints, 3);
   for (int i = 0; i < n_constraints; ++i) {
     A.row(i) = psi2_A(Lambda, n[i]);
@@ -118,16 +119,14 @@ std::vector<double> hocbfPositionFilter(Eigen::VectorXd& tau_nominal,
   Eigen::Vector<real_t, Eigen::Dynamic> A_lb(n_constraints);
 
   for (int i = 0; i < n_constraints; ++i) {
-    // A_lb(i) = quadratic_psi2_b(Lambda, mu, x_des, x, n[i], p[i]);
-    // A_lb(i) = 0.0;
-    linear_psi2_b(Lambda, mu, x, dot_x, n[i], p[i], k);
+    A_lb(i) = linear_psi2_b(Lambda, mu, x, dot_x, n[i], p[i], k);
   }
   int nWSR = 200;
 
   min_problem.init(0, g.data(), A.data(), 0, 0, A_lb.data(), 0, nWSR);
 
-  Eigen::Vector<real_t, 3> F_u_star;
-  auto status = min_problem.getPrimalSolution(F_u_star.data());
+  Eigen::Vector<real_t, 3> F_u_pos_star;
+  auto status = min_problem.getPrimalSolution(F_u_pos_star.data());
   if (status != qpOASES::SUCCESSFUL_RETURN) {
     std::cerr << "Error in init: "
               << qpOASES::MessageHandling::getErrorCodeMessage(status)
@@ -135,13 +134,14 @@ std::vector<double> hocbfPositionFilter(Eigen::VectorXd& tau_nominal,
     exit(1);
   }
   // add missing wrench components
-  Eigen::Vector<double, 6> F_u_tot{F_u_star(0), F_u_star(1), F_u_star(2),
-                                   F_u(3),      F_u(4),      F_u(5)};
+  Eigen::Vector<double, 6> F_u_tot{F_u_pos_star(0), F_u_pos_star(1),
+                                   F_u_pos_star(2), F_u(3),
+                                   F_u(4),          F_u(5)};
 
-  Eigen::Vector<double, 6> tau_tmp = tau_nominal;
-  tau_nominal = J.transpose() * F_u_tot;
-  std::cout << "tau_error: " << (tau_nominal - tau_tmp).transpose()
-            << std::endl;
+  // Eigen::VectorXd tau_tmp = tau_nominal;
+  F_u = F_u_tot;
+  // std::cout << "tau_error: " << (tau_nominal - tau_tmp).transpose()
+  //           << std::endl;
   // std::cout << "tau_nominal: " << tau_nominal.transpose() << std::endl;
   // std::cout << "Lambda: " << Lambda << std::endl;
   // std::cout << "J: " << J << std::endl;
@@ -152,8 +152,7 @@ std::vector<double> hocbfPositionFilter(Eigen::VectorXd& tau_nominal,
   // std::cout << "p: " << p[0].transpose() << std::endl;
   // std::cout << "k: " << k << std::endl;
 
-  double psi_2 =
-      log_psi2_linear(tau_nominal, Lambda, J, mu, x, dot_x, n[0], p[0], k);
+  double psi_2 = log_psi2_linear(F_u, Lambda, J, mu, x, dot_x, n[0], p[0], k);
   logs.push_back(psi_2);
   return logs;
 }

@@ -10,6 +10,7 @@
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "planes_hocbf.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "visualization.hpp"
 namespace hocbf_cartesian_impedance_controller {
 
 class HOCBFCartesianImpedanceController
@@ -58,6 +59,9 @@ class HOCBFCartesianImpedanceController
       m_target_frame_subscriber;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
       m_logger_publisher;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr
+      m_marker_pub;
+  std::shared_ptr<Visualizer> m_visualizer;
   KDL::Frame m_target_frame, m_old_target_frame, m_initial_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
@@ -74,7 +78,7 @@ class HOCBFCartesianImpedanceController
   ctrl::VectorND m_old_vel_error;
   double const m_alpha = 0.3;
   rclcpp::Time m_last_time;
-
+  int m_vis_iter = 0;
   bool m_received_initial_frame = false;
 };
 

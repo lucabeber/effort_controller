@@ -10,6 +10,7 @@ add_definitions(-DEIGEN_MPL2_ONLY)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(effort_controller_base REQUIRED)
+find_package(visualization_msgs REQUIRED)
 set(QPOASES_INSTALL_DIR ${CMAKE_BINARY_DIR}/qpoases_install)
 include(ExternalProject)
 ExternalProject_Add(
@@ -36,6 +37,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
         rclcpp
         effort_controller_base
         Eigen3
+        visualization_msgs
 )
 
 ament_export_dependencies(

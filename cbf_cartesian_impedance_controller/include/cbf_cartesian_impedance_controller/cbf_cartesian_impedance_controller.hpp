@@ -16,7 +16,7 @@ namespace cbf_cartesian_impedance_controller {
 
 class CBFCartesianImpedanceController
     : public virtual effort_controller_base::EffortControllerBase {
-public:
+ public:
   CBFCartesianImpedanceController();
 
   virtual LifecycleNodeInterface::CallbackReturn on_init() override;
@@ -30,8 +30,8 @@ public:
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
 
-  controller_interface::return_type
-  update(const rclcpp::Time &time, const rclcpp::Duration &period) override;
+  controller_interface::return_type update(
+      const rclcpp::Time &time, const rclcpp::Duration &period) override;
 
   ctrl::VectorND computeTorque();
 
@@ -43,15 +43,14 @@ public:
   double m_null_space_damping;
   ctrl::Vector6D m_target_wrench;
 
-private:
-  std::shared_ptr<Visualizer> m_visualizer;
+ private:
   int vis_iter = 0;
   ctrl::Vector6D compensateGravity();
 
   void targetWrenchCallback(
       const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
-  void
-  targetFrameCallback(const geometry_msgs::msg::PoseStamped::SharedPtr target);
+  void targetFrameCallback(
+      const geometry_msgs::msg::PoseStamped::SharedPtr target);
   ctrl::Vector6D computeMotionError();
 
   rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
@@ -60,7 +59,9 @@ private:
       m_target_frame_subscriber;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
       m_logger_publisher;
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr m_marker_pub;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr
+      m_marker_pub;
+  std::shared_ptr<Visualizer> m_visualizer;
   KDL::Frame m_target_frame, m_old_target_frame, m_filtered_target,
       m_initial_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
@@ -82,6 +83,6 @@ private:
   bool m_received_initial_frame = false;
 };
 
-} // namespace cbf_cartesian_impedance_controller
+}  // namespace cbf_cartesian_impedance_controller
 
 #endif
