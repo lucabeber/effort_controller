@@ -61,7 +61,7 @@ double log_psi2_linear(const Eigen::VectorXd& F_u,
   const double dot_h_ = dot_h(dot_x1, n);
   const double ddot_h_ = ddot_h(dot_x2, n);
   // return ddot_h_ + k * dot_h_ + k * std::sqrt(dot_h_ + k * h_);
-  return ddot_h_ + 2 * k * dot_h_ + 2 * k * k * h_;
+  return ddot_h_ + 2 * k * dot_h_ + k * k * h_;
 }
 
 // psi_2 A matrix
@@ -98,7 +98,7 @@ std::vector<double> hocbfPositionFilter(Eigen::VectorXd& F_u,
                                 qpOASES::HessianType::HST_IDENTITY);
   min_problem.setOptions(qpOptions);
 
-  const double k = 10.0;
+  const double k = 50.0;
   Eigen::Vector3d x(current_frame.p.x(), current_frame.p.y(),
                     current_frame.p.z());
   // Eigen::MatrixXd J_tran_pinv;
@@ -133,13 +133,9 @@ std::vector<double> hocbfPositionFilter(Eigen::VectorXd& F_u,
               << std::endl;
     exit(1);
   }
-  // add missing wrench components
-  Eigen::Vector<double, 6> F_u_tot{F_u_pos_star(0), F_u_pos_star(1),
-                                   F_u_pos_star(2), F_u(3),
-                                   F_u(4),          F_u(5)};
 
   // Eigen::VectorXd tau_tmp = tau_nominal;
-  F_u = F_u_tot;
+  F_u.head(3) = F_u_pos_star;
   // std::cout << "tau_error: " << (tau_nominal - tau_tmp).transpose()
   //           << std::endl;
   // std::cout << "tau_nominal: " << tau_nominal.transpose() << std::endl;
