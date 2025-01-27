@@ -111,6 +111,9 @@ CartesianImpedanceController::on_configure(
           get_node()->get_name() + std::string("/target_frame"), 3,
           std::bind(&CartesianImpedanceController::targetFrameCallback, this,
                     std::placeholders::_1));
+  m_data_publisher =
+      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
+          get_node()->get_name() + std::string("/data"), 10);
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -161,8 +164,9 @@ CartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CartesianImpedanceController::update(
-    const rclcpp::Time &time, const rclcpp::Duration &period) {
+controller_interface::return_type
+CartesianImpedanceController::update(const rclcpp::Time &time,
+                                     const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -190,7 +194,7 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -251,12 +255,32 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   // Compute the stiffness and damping in the base link
   const auto base_link_stiffness =
       Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
+
   const auto base_link_damping =
       Base::displayInBaseLink(m_cartesian_damping, Base::m_end_effector_link);
 
+  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "Base link damping: \n"
+  //                                                  << base_link_damping);
+
+  KDL::JntSpaceInertiaMatrix inertia_matrix(Base::m_joint_number);
+  m_dyn_solver->JntToMass(Base::m_joint_positions, inertia_matrix);
+
+  Eigen::MatrixXd Lambda =
+      (jac * inertia_matrix.data.inverse() * jac.transpose()).inverse();
+
+  Eigen::MatrixXd K_d = m_cartesian_stiffness;
+  auto D_d = computeD(Lambda, K_d, 0.7);
+
+  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "..............D_d: \n" <<
+  // D_d);
+
   // Compute the task torque
-  tau_task = jac.transpose() * (base_link_stiffness * motion_error -
-                                (base_link_damping * (jac * q_dot)));
+  tau_task = jac.transpose() * (K_d * motion_error - (D_d * (jac * q_dot)));
+  
+  auto tau_task_old = tau_task;
+  tau_task_old = jac.transpose() * (base_link_damping * motion_error -
+                                    (base_link_damping * (jac * q_dot)));
+
 
   // Compute the null space torque
   q_null_space = m_q_starting_pose;
@@ -281,6 +305,27 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
                                       Base::m_joint_velocities, tau_coriolis);
     tau = tau + tau_coriolis.data;
   }
+
+  std_msgs::msg::Float64MultiArray datas;
+  for (size_t i = 0; i < Base::m_joint_number; i++) {
+    datas.data.push_back(-tau(i));
+    // tau(i) = 0.0;
+  }
+  for (size_t i = 0; i < Base::m_joint_number; i++) {
+    datas.data.push_back(-tau_task_old(i));
+  }
+  double dt = 0.001; //*get_node()->get_clock()->now().seconds() - m_last_time;
+  // m_last_time = *get_node()->get_clock()->now().seconds();
+
+  double tmp = (q_dot(0) - m_vel_old) / dt;
+  current_acc_j0 = 0.1 * tmp + 0.9 * current_acc_j0;
+  m_vel_old = q_dot(0);
+  Eigen::VectorXd tau_corioliss = tau_coriolis.data;
+  // datas.data.push_back(tau_corioliss(0));
+  datas.data.push_back(q_dot(0) * 200.0);
+  datas.data.push_back(current_acc_j0 * 100.0);
+  m_data_publisher->publish(datas);
+
   return tau;
 }
 
@@ -320,7 +365,7 @@ void CartesianImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-}  // namespace cartesian_impedance_controller
+} // namespace cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

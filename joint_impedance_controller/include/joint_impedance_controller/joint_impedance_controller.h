@@ -5,7 +5,8 @@
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include <controller_interface/controller_interface.hpp>
 #include <effort_controller_base/effort_controller_base.h>
-
+#include "std_msgs/msg/float64_multi_array.hpp"
+#include "compute_D.hpp"
 namespace joint_impedance_controller {
 
 /**
@@ -74,6 +75,8 @@ private:
       m_target_wrench_subscriber;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
       m_target_frame_subscriber;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
+      m_data_publisher;
   KDL::Frame m_target_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
@@ -85,6 +88,10 @@ private:
   ctrl::MatrixND m_identity;
   ctrl::VectorND m_q_starting_pose;
   ctrl::VectorND m_tau_old;
+
+  double m_vel_old = 0.0;
+  double m_last_time = 0.0;
+  double current_acc_j0 = 0.0;
 
   ctrl::Vector3D m_old_rot_error;
   ctrl::VectorND m_old_vel_error;

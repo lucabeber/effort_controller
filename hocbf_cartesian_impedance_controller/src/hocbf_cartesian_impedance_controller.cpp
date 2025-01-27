@@ -325,10 +325,10 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   ctrl::Vector6D F_task = (base_link_stiffness * motion_error -
                            (base_link_damping * (jac * q_dot)));
 
-  RCLCPP_INFO_STREAM_THROTTLE(
-      get_node()->get_logger(), *get_node()->get_clock(), 1000,
-      "motion_error xyz: " << motion_error.head<3>().norm()
-                           << " rpy: " << motion_error.tail<3>().norm());
+  // RCLCPP_INFO_STREAM_THROTTLE(
+  //     get_node()->get_logger(), *get_node()->get_clock(), 1000,
+  //     "motion_error xyz: " << motion_error.head<3>().norm()
+  //                          << " rpy: " << motion_error.tail<3>().norm());
 
   // Compute the null space torque
   // q_null_space = m_q_starting_pose;
@@ -358,7 +358,9 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
       m_k1, m_k2);
   m_last_time = current_time;
   // logs.push_back(current_time.seconds());  // 4
-
+  if (logs[0] <= 0.0) {
+    RCLCPP_INFO_STREAM(get_node()->get_logger(), "PSI >= 0.0: " << logs[0]);
+  }
   tau_task = jac.transpose() * F_u;
   tau = tau_task;
   logs.push_back(0.0);
