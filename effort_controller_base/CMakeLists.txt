@@ -20,7 +20,7 @@ find_package(kdl_parser REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(urdf REQUIRED)
-
+find_package(lbr_fri_idl)
 
 # Convenience variable for dependencies
 set(THIS_PACKAGE_INCLUDE_DEPENDS
@@ -30,6 +30,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
         pluginlib
         urdf
         Eigen3
+        lbr_fri_idl
 )
 
 ament_export_dependencies(

@@ -113,7 +113,7 @@ CartesianImpedanceController::on_configure(
                     std::placeholders::_1));
   m_data_publisher =
       get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
-          get_node()->get_name() + std::string("/data"), 10);
+          get_node()->get_name() + std::string("/data"), 1);
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -243,9 +243,9 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
 
   // Initialize the torque vectors
   ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number),
-      tau_ext(Base::m_joint_number);
+      tau_ext(Base::m_joint_number), tau_task_old(Base::m_joint_number);
 
-  // Filter the velocity errorm_old_vel_error
+  // Filter the velocity error
   q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
   for (int i = 0; i < q_dot.size(); i++) {
     q_dot(i) = std::round(q_dot(i) * 1000) / 1000;
@@ -268,17 +268,15 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   Eigen::MatrixXd Lambda =
       (jac * inertia_matrix.data.inverse() * jac.transpose()).inverse();
 
-  Eigen::MatrixXd K_d = m_cartesian_stiffness;
-  auto D_d = computeD(Lambda, K_d, 0.7);
+  Eigen::MatrixXd K_d = base_link_stiffness;
+  auto D_d = computeD(Lambda, K_d, 1.0);
 
   // RCLCPP_INFO_STREAM(get_node()->get_logger(), "..............D_d: \n" <<
   // D_d);
 
   // Compute the task torque
   tau_task = jac.transpose() * (K_d * motion_error - (D_d * (jac * q_dot)));
-  
-  auto tau_task_old = tau_task;
-  tau_task_old = jac.transpose() * (base_link_damping * motion_error -
+  tau_task_old = jac.transpose() * (base_link_stiffness * motion_error -
                                     (base_link_damping * (jac * q_dot)));
 
 
@@ -291,7 +289,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
-  ctrl::VectorND tau = tau_task + tau_null + tau_ext;
+  ctrl::VectorND tau = tau_task_old + tau_null + tau_ext;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
@@ -308,11 +306,11 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
 
   std_msgs::msg::Float64MultiArray datas;
   for (size_t i = 0; i < Base::m_joint_number; i++) {
-    datas.data.push_back(-tau(i));
+    datas.data.push_back(tau_task(i));
     // tau(i) = 0.0;
   }
   for (size_t i = 0; i < Base::m_joint_number; i++) {
-    datas.data.push_back(-tau_task_old(i));
+    datas.data.push_back(tau_task_old(i));
   }
   double dt = 0.001; //*get_node()->get_clock()->now().seconds() - m_last_time;
   // m_last_time = *get_node()->get_clock()->now().seconds();

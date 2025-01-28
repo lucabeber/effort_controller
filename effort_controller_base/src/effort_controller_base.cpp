@@ -69,10 +69,10 @@ EffortControllerBase::on_init() {
                                            std::vector<std::string>());
     auto_declare<std::vector<std::string>>("command_interfaces",
                                            {hardware_interface::HW_IF_EFFORT});
-    auto_declare<std::vector<std::string>>(
-        "state_interfaces",
-        {hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY,
-         hardware_interface::HW_IF_EFFORT});
+    auto_declare<std::vector<std::string>>("state_interfaces",
+                                           {hardware_interface::HW_IF_POSITION,
+                                            hardware_interface::HW_IF_VELOCITY,
+                                            hardware_interface::HW_IF_EFFORT});
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
     m_initialized = true;
@@ -106,6 +106,31 @@ EffortControllerBase::on_init() {
     }
     m_robot_description = *robot_description_ptr;
   }
+
+  m_commanded_torque_publisher =
+      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
+          get_node()->get_name() + std::string("/commanded_torque"), 1);
+  m_measured_torque_publisher =
+      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
+          get_node()->get_name() + std::string("/measured_torque"), 1);
+
+  m_lbr_state_subscriber =
+      get_node()->create_subscription<lbr_fri_idl::msg::LBRState>(
+          std::string("state"), 1,
+          [this](const lbr_fri_idl::msg::LBRState::SharedPtr msg) {
+            std_msgs::msg::Float64MultiArray datas;
+            for (size_t i = 0; i < m_joint_number; i++) {
+              datas.data.push_back(-msg->commanded_torque[i]);
+            }
+            m_commanded_torque_publisher->publish(datas);
+            datas.data.clear();
+            for(size_t i = 0; i < m_joint_number; i++) {
+              datas.data.push_back(-msg->measured_torque[i]);
+            }
+            m_measured_torque_publisher->publish(datas);
+          });
+  
+
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -178,10 +203,9 @@ EffortControllerBase::on_configure(
   }
   if (!robot_tree.getChain(m_robot_base_link, m_end_effector_link,
                            m_robot_chain)) {
-    const std::string error =
-        ""
-        "Failed to parse robot chain from urdf model. "
-        "Do robot_base_link and end_effector_link exist?";
+    const std::string error = ""
+                              "Failed to parse robot chain from urdf model. "
+                              "Do robot_base_link and end_effector_link exist?";
     RCLCPP_ERROR(get_node()->get_logger(), error.c_str());
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::ERROR;
@@ -455,8 +479,9 @@ void EffortControllerBase::computeIKSolution(
   simulated_joint_positions = m_simulated_joint_motion.data;
 }
 
-ctrl::Vector6D EffortControllerBase::displayInBaseLink(
-    const ctrl::Vector6D &vector, const std::string &from) {
+ctrl::Vector6D
+EffortControllerBase::displayInBaseLink(const ctrl::Vector6D &vector,
+                                        const std::string &from) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -479,8 +504,9 @@ ctrl::Vector6D EffortControllerBase::displayInBaseLink(
   return out;
 }
 
-ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
-    const ctrl::Matrix6D &tensor, const std::string &from) {
+ctrl::Matrix6D
+EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D &tensor,
+                                        const std::string &from) {
   // Get rotation to base
   KDL::Frame R_kdl;
   m_forward_kinematics_solver->JntToCart(m_joint_positions, R_kdl, from);
@@ -501,8 +527,9 @@ ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
   return tmp;
 }
 
-ctrl::Vector6D EffortControllerBase::displayInTipLink(
-    const ctrl::Vector6D &vector, const std::string &to) {
+ctrl::Vector6D
+EffortControllerBase::displayInTipLink(const ctrl::Vector6D &vector,
+                                       const std::string &to) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -542,4 +569,4 @@ void EffortControllerBase::updateJointStates() {
   }
 }
 
-}  // namespace effort_controller_base
+} // namespace effort_controller_base

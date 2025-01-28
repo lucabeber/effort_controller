@@ -38,6 +38,8 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "lbr_fri_idl/msg/lbr_state.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 
 namespace effort_controller_base {
 
@@ -196,6 +198,11 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
       m_joint_state_pos_handles;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
       m_joint_state_vel_handles;
+  rclcpp::Subscription<lbr_fri_idl::msg::LBRState>::SharedPtr m_lbr_state_subscriber;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr m_commanded_torque_publisher;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr m_measured_torque_publisher;
+
+
 
   size_t m_joint_number;
 
