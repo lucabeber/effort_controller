@@ -56,6 +56,10 @@ HOCBFCartesianImpedanceController::on_configure(
         CallbackReturn::ERROR;
   }
 
+  m_k1 = get_node()->get_parameter("alpha_1").as_double();
+  m_k2 = get_node()->get_parameter("alpha_2").as_double();
+  RCLCPP_INFO(get_node()->get_logger(), "alpha_1: %f, alpha_2: %f", m_k1, m_k2);
+
   // Set stiffness
   ctrl::Vector6D tmp;
   tmp[0] = get_node()->get_parameter("stiffness.trans_x").as_double();
@@ -66,6 +70,9 @@ HOCBFCartesianImpedanceController::on_configure(
   tmp[5] = get_node()->get_parameter("stiffness.rot_z").as_double();
 
   m_cartesian_stiffness = tmp.asDiagonal();
+  RCLCPP_INFO(get_node()->get_logger(),
+              "Cartesian stiffness: %f, %f, %f, %f, %f, %f", tmp[0], tmp[1],
+              tmp[2], tmp[3], tmp[4], tmp[5]);
 
   // Set damping
   tmp[0] = 2 * sqrt(tmp[0]);
@@ -76,6 +83,9 @@ HOCBFCartesianImpedanceController::on_configure(
   tmp[5] = 2 * sqrt(tmp[5]);
 
   m_cartesian_damping = tmp.asDiagonal();
+  RCLCPP_INFO(get_node()->get_logger(),
+              "Cartesian damping: %f, %f, %f, %f, %f, %f", tmp[0], tmp[1],
+              tmp[2], tmp[3], tmp[4], tmp[5]);
 
   // Set nullspace stiffness
   m_null_space_stiffness =
@@ -264,35 +274,24 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   auto current_time = get_node()->get_clock()->now();
   double dt = (current_time - m_last_time).seconds();
 
-  // filter position
   std::vector<Eigen::Vector3d> n, p;
   n.push_back(Eigen::Vector3d::UnitZ());
   p.push_back(Eigen::Vector3d::UnitZ() * 0.4);
 
-  // plane at y = 0.1 and -0.1
   // Eigen::Vector3d plane(0.0, 1.0, 0.0);
-  // Eigen::Vector3d point(0.0, -0.1, 0.0);
-
-  // n.push_back(plane);
-  // p.push_back(point);
-
+  // Eigen::Vector3d point(0.0, -0.2, 0.0);
+  // constraint_planes.push_back(std::make_pair(plane, point));
   // plane << 0.0, -1.0, 0.0;
-  // point << 0.0, 0.1, 0.0;
+  // point << 0.0, 0.2, 0.0;
+  // constraint_planes.push_back(std::make_pair(plane, point));
 
-  // n.push_back(plane);
-  // p.push_back(point);
-  std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> constraint_planes;
-
-  for (size_t i = 0; i < n.size(); i++) {
-    constraint_planes.push_back(std::make_pair(n[i], p[i]));
-  }
   if (m_vis_iter == 0) {
     Eigen::Vector3d target(m_target_frame.p.x(), m_target_frame.p.y(),
                            m_target_frame.p.z());
     Eigen::Vector3d filtered_target(m_target_frame.p.x(), m_target_frame.p.y(),
                                     m_target_frame.p.z());
-    m_visualizer->draw_scene(constraint_planes, target, filtered_target,
-                             current_time, 0.015);
+    m_visualizer->draw_scene(n, p, target, filtered_target, current_time,
+                             0.015);
   }
   m_vis_iter = (m_vis_iter + 1) % 10;
   // set limits (radiants) from initial orientation
@@ -355,7 +354,8 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   Eigen::VectorXd dot_x = (jac * q_dot).head(3);
 
   std::vector<double> logs = planes_hocbf::hocbfPositionFilter(
-      F_u, Lambda, jac, tau_coriolis.data, m_current_frame, dot_x, dt, n, p);
+      F_u, Lambda, jac, tau_coriolis.data, m_current_frame, dot_x, dt, n, p,
+      m_k1, m_k2);
   m_last_time = current_time;
   // logs.push_back(current_time.seconds());  // 4
   if (logs[0] <= 0.0) {
@@ -363,7 +363,7 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   }
   tau_task = jac.transpose() * F_u;
   tau = tau_task;
-
+  logs.push_back(0.0);
   logs.push_back(p[0][2]);
   logs.push_back(m_current_frame.p.z());
   logs.push_back(m_target_frame.p.z());

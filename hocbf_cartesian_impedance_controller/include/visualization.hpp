@@ -12,10 +12,10 @@ class Visualizer {
   std::string reference_frame_;
   double plane_size_;
 
-  void draw_scene(std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>
-                      constraint_planes,
-                  Eigen::Vector3d target, Eigen::Vector3d filtered_target,
-                  rclcpp::Time stamp, double radius) {
+  void draw_scene(std::vector<Eigen::Vector3d> n,
+                  std::vector<Eigen::Vector3d> p, Eigen::Vector3d target,
+                  Eigen::Vector3d filtered_target, rclcpp::Time stamp,
+                  double radius) {
     visualization_msgs::msg::MarkerArray marker_array;
     visualization_msgs::msg::Marker marker;
     marker.header.frame_id = reference_frame_;
@@ -59,12 +59,12 @@ class Visualizer {
     marker.color.b = 0.0;
     marker.color.a = 0.7;
     Eigen::Vector3d z_axis(0.0, 0.0, 1.0);
-    for (size_t i = 0; i < constraint_planes.size(); i++) {
-      auto n = constraint_planes[i].first;
-      n = n.normalized();
-      auto p = constraint_planes[i].second;
-      auto rotation_axis = z_axis.cross(n);
-      auto rotation_angle = std::acos(z_axis.dot(n));
+    for (size_t i = 0; i < n.size(); i++) {
+      auto n_i = n[i];
+      n_i = n_i.normalized();
+      auto p_i = p[i];
+      auto rotation_axis = z_axis.cross(n_i);
+      auto rotation_angle = std::acos(z_axis.dot(n_i));
       Eigen::Quaterniond q;
       q = Eigen::AngleAxisd(rotation_angle, rotation_axis);
       marker.id = i;
@@ -72,9 +72,9 @@ class Visualizer {
       marker.pose.orientation.y = q.y();
       marker.pose.orientation.z = q.z();
       marker.pose.orientation.w = q.w();
-      marker.pose.position.x = p(0);
-      marker.pose.position.y = p(1);
-      marker.pose.position.z = p(2);
+      marker.pose.position.x = p_i(0);
+      marker.pose.position.y = p_i(1);
+      marker.pose.position.z = p_i(2);
       marker_array.markers.push_back(marker);
     }
     marker_pub_->publish(marker_array);
