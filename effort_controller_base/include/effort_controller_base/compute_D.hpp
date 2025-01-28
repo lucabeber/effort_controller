@@ -1,14 +1,12 @@
 #include <Eigen/Dense>
 #include <iostream>
-
+#pragma once
 // This function computes the damping matrix D_d as in A. Albu-Schaffer, C. Ott,
 // U. Frese and G. Hirzinger, "Cartesian impedance control of redundant robots:
 // recent results with the DLR-light-weight-arms," 2003 IEEE International
 // Conference on Robotics and Automation
-
 Eigen::MatrixXd computeD(const Eigen::MatrixXd &Lambda,
                          const Eigen::MatrixXd &K_d, const double csi = 1.0) {
-
   Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> solver(K_d, Lambda);
   if (solver.info() != Eigen::Success) {
     throw std::runtime_error("Eigen decomposition failed!");

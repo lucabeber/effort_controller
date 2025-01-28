@@ -6,6 +6,8 @@
 #include <controller_interface/controller_interface.hpp>
 
 #include "conic_cbf.hpp"
+#include "controller_interface/controller_interface.hpp"
+#include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "planes_hocbf.hpp"

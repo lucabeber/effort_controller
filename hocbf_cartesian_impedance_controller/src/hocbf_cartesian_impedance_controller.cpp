@@ -1,9 +1,5 @@
 #include "hocbf_cartesian_impedance_controller/hocbf_cartesian_impedance_controller.hpp"
 
-#include "controller_interface/controller_interface.hpp"
-#include "effort_controller_base/Utility.h"
-#include "hocbf_cartesian_impedance_controller/pseudo_inversion.h"
-
 namespace hocbf_cartesian_impedance_controller {
 
 HOCBFCartesianImpedanceController::HOCBFCartesianImpedanceController()
