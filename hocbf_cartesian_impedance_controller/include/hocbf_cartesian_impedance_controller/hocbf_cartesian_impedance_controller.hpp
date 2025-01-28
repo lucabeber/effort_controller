@@ -39,7 +39,6 @@ class HOCBFCartesianImpedanceController
   using Base = effort_controller_base::EffortControllerBase;
 
   ctrl::Matrix6D m_cartesian_stiffness;
-  ctrl::Matrix6D m_cartesian_damping;
   double m_null_space_stiffness;
   double m_null_space_damping;
   ctrl::Vector6D m_target_wrench;

@@ -242,7 +242,7 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
   // Eigen::MatrixXd M = inertia_matrix.data;
   // Eigen::MatrixXd K_d = m_joint_stiffness.asDiagonal();
 
-  // auto D_d = computeD(M, K_d, 0.7);
+  // auto D_d = compute_correct_damping(M, K_d, 0.7);
 
   std_msgs::msg::Float64MultiArray datas;
   // Compute the desired joint torques

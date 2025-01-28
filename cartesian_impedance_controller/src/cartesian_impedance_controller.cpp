@@ -264,7 +264,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
       (jac * inertia_matrix.data.inverse() * jac.transpose()).inverse();
 
   Eigen::MatrixXd K_d = base_link_stiffness;
-  auto D_d = computeD(Lambda, K_d, 0.7);
+  auto D_d = compute_correct_damping(Lambda, K_d, 0.7);
 
   // RCLCPP_INFO_STREAM(get_node()->get_logger(), "..............D_d: \n" <<
   // D_d);
