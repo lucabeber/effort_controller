@@ -40,6 +40,9 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "lbr_fri_idl/msg/lbr_state.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
+
 namespace effort_controller_base {
 
 class RobotDescriptionListener : public rclcpp::Node {

@@ -272,7 +272,6 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   // Compute the task torque
   tau_task = jac.transpose() * (K_d * motion_error - (D_d * (jac * q_dot)));
 
-  ctrl::VectorND tau_task_old(Base::m_joint_number);
   tau_task_old = jac.transpose() * (base_link_damping * motion_error -
                                     (base_link_damping * (jac * q_dot)));
 

@@ -30,12 +30,12 @@ controller_interface::InterfaceConfiguration
 EffortControllerBase::command_interface_configuration() const {
   controller_interface::InterfaceConfiguration conf;
   conf.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-  conf.names.reserve(m_joint_names.size() * m_cmd_interface_types.size());
-  for (const auto &type : m_cmd_interface_types) {
-    for (const auto &joint_name : m_joint_names) {
-      conf.names.push_back(joint_name + std::string("/").append(type));
-    }
-  }
+  // conf.names.reserve(m_joint_names.size() * m_cmd_interface_types.size());
+  // for (const auto &type : m_cmd_interface_types) {
+  //   for (const auto &joint_name : m_joint_names) {
+  //     conf.names.push_back(joint_name + std::string("/").append(type));
+  //   }
+  // }
   return conf;
 }
 
@@ -289,22 +289,22 @@ EffortControllerBase::on_configure(
   }
   // Check command interfaces.
   // We support effort.
-  m_cmd_interface_types =
-      get_node()->get_parameter("command_interfaces").as_string_array();
-  if (m_cmd_interface_types.empty()) {
-    RCLCPP_ERROR(get_node()->get_logger(), "No command_interfaces specified");
-    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-        CallbackReturn::ERROR;
-  }
-  for (const auto &type : m_cmd_interface_types) {
-    if (type != hardware_interface::HW_IF_EFFORT) {
-      RCLCPP_ERROR(get_node()->get_logger(),
-                   "Unsupported command interface: %s. Choose effort",
-                   type.c_str());
-      return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-          CallbackReturn::ERROR;
-    }
-  }
+  // m_cmd_interface_types =
+  //     get_node()->get_parameter("command_interfaces").as_string_array();
+  // if (m_cmd_interface_types.empty()) {
+  //   RCLCPP_ERROR(get_node()->get_logger(), "No command_interfaces specified");
+  //   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
+  //       CallbackReturn::ERROR;
+  // }
+  // for (const auto &type : m_cmd_interface_types) {
+  //   if (type != hardware_interface::HW_IF_EFFORT) {
+  //     RCLCPP_ERROR(get_node()->get_logger(),
+  //                  "Unsupported command interface: %s. Choose effort",
+  //                  type.c_str());
+  //     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
+  //         CallbackReturn::ERROR;
+  //   }
+  // }
   m_state_interface_types =
       get_node()->get_parameter("state_interfaces").as_string_array();
   if (m_state_interface_types.empty()) {
@@ -313,14 +313,14 @@ EffortControllerBase::on_configure(
         CallbackReturn::ERROR;
   }
   // Check if kuka is been used
-  m_kuka_hw = get_node()->get_parameter("kuka_hw").as_bool();
-  if (m_kuka_hw == true) {
-    RCLCPP_WARN(
-        get_node()->get_logger(),
-        "Using Kuka, the position will be overwritten at each control cycle to "
-        "make the robot behave as in gravity compensation mode");
-    m_cmd_interface_types.push_back(hardware_interface::HW_IF_POSITION);
-  }
+  // m_kuka_hw = get_node()->get_parameter("kuka_hw").as_bool();
+  // if (m_kuka_hw == true) {
+  //   RCLCPP_WARN(
+  //       get_node()->get_logger(),
+  //       "Using Kuka, the position will be overwritten at each control cycle to "
+  //       "make the robot behave as in gravity compensation mode");
+  //   m_cmd_interface_types.push_back(hardware_interface::HW_IF_POSITION);
+  // }
   m_configured = true;
 
   // Initialize effords to null
@@ -433,21 +433,21 @@ EffortControllerBase::on_activate(
 
 void EffortControllerBase::writeJointEffortCmds() {
   // Write all available types.
-  for (const auto &type : m_cmd_interface_types) {
-    if (type == hardware_interface::HW_IF_EFFORT) {
-      for (size_t i = 0; i < m_joint_number; ++i) {
-        // Effort saturation
-        m_efforts[i] = std::clamp(m_efforts[i], -m_joint_effort_limits(i),
-                                  m_joint_effort_limits(i));
-        m_joint_cmd_eff_handles[i].get().set_value(m_efforts[i]);
-      }
-    }
-  }
-  if (m_kuka_hw == true) {
-    for (size_t i = 0; i < m_joint_number; ++i) {
-      m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
-    }
-  }
+  // for (const auto &type : m_cmd_interface_types) {
+  //   if (type == hardware_interface::HW_IF_EFFORT) {
+  //     for (size_t i = 0; i < m_joint_number; ++i) {
+  //       // Effort saturation
+  //       m_efforts[i] = std::clamp(m_efforts[i], -m_joint_effort_limits(i),
+  //                                 m_joint_effort_limits(i));
+  //       m_joint_cmd_eff_handles[i].get().set_value(m_efforts[i]);
+  //     }
+  //   }
+  // }
+  // if (m_kuka_hw == true) {
+  //   for (size_t i = 0; i < m_joint_number; ++i) {
+  //     m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
+  //   }
+  // }
 }
 
 void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND &tau) {

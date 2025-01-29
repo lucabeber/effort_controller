@@ -132,12 +132,6 @@ JointImpedanceController::on_activate(
   m_q_desired = Base::m_joint_positions.data;
   m_q_starting_pose = Base::m_joint_positions.data;
 
-<<<<<<< HEAD
-=======
-  // Initialize the old torque to zero
-  m_tau_old = ctrl::VectorND::Zero(Base::m_joint_number);
-
->>>>>>> 2b539dd6e79279a064c55f70f33eb7d88cc32f7e
   m_old_rot_error = ctrl::Vector3D::Zero();
 
   m_old_vel_error = ctrl::VectorND::Zero(Base::m_joint_number);
@@ -161,14 +155,9 @@ JointImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-<<<<<<< HEAD
 controller_interface::return_type
 JointImpedanceController::update(const rclcpp::Time &time,
                                  const rclcpp::Duration &period) {
-=======
-controller_interface::return_type JointImpedanceController::update(
-    const rclcpp::Time &time, const rclcpp::Duration &period) {
->>>>>>> 2b539dd6e79279a064c55f70f33eb7d88cc32f7e
   // Update joint states
   Base::updateJointStates();
 
@@ -196,7 +185,7 @@ ctrl::Vector6D JointImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -287,7 +276,7 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
   // tau_gravity.data).transpose());
 
   // log
-  double dt = 0.001;  //*get_node()->get_clock()->now().seconds() - m_last_time;
+  double dt = 0.001; //*get_node()->get_clock()->now().seconds() - m_last_time;
   // m_last_time = *get_node()->get_clock()->now().seconds();
 
   double tmp = (q_dot(0) - m_vel_old) / dt;
@@ -338,7 +327,7 @@ void JointImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-}  // namespace joint_impedance_controller
+} // namespace joint_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>
