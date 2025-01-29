@@ -10,7 +10,6 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
-#include "lbr_fri_idl/msg/lbr_wrench_command.hpp"
 
 namespace cartesian_impedance_controller {
 
@@ -81,8 +80,6 @@ private:
       m_target_frame_subscriber;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
       m_data_publisher;
-  rclcpp::Publisher<lbr_fri_idl::msg::LBRWrenchCommand>::SharedPtr
-      m_wrench_publisher;
   KDL::Frame m_target_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
@@ -100,9 +97,7 @@ private:
   double const m_alpha = 0.3;
   double m_vel_old = 0.0;
   double current_acc_j0 = 0.0;
-  bool m_first_iter = true;
   bool m_compensate_dJdq = false;
-  Eigen::VectorXd initial_joint_positions; 
   /**
    * Allow users to choose whether to specify their target wrenches in the
    * end-effector frame (= True) or the base frame (= False). The first one

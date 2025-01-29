@@ -114,12 +114,6 @@ CartesianImpedanceController::on_configure(
       get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
           get_node()->get_name() + std::string("/data"), 1);
 
-  m_wrench_publisher =
-      get_node()->create_publisher<lbr_fri_idl::msg::LBRWrenchCommand>(
-          get_node()->get_name() + std::string("/command/wrench"), 1);
-
-  initial_joint_positions = Eigen::VectorXd::Zero(m_joint_number);
-
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -246,12 +240,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   // Redefine joints velocities in Eigen format
   ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
-  ctrl::VectorND q_null_space = Base::m_simulated_joint_motion.data;
-
-  if (m_first_iter) {
-    initial_joint_positions = q;
-    m_first_iter = false;
-  }
+  ctrl::VectorND q_null_space(Base::m_joint_number);
 
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
@@ -285,7 +274,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   //     Base::m_end_effector_link);
 
   Eigen::MatrixXd K_d = base_link_stiffness;
-  auto D_d = compute_correct_damping(Lambda, K_d, 0.7);
+  auto D_d = compute_correct_damping(Lambda, K_d, 1.0);
 
   // Compute the task torque
   Eigen::VectorXd Force = (K_d * motion_error - (D_d * (jac * q_dot)));
@@ -325,24 +314,6 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
 
   // add norm of j_tran_lambda_jdot_qdot
   // datas.data.push_back(j_tran_lambda_jdot_qdot.norm());
-
-  lbr_fri_idl::msg::LBRWrenchCommand wrench_msg;
-  wrench_msg.wrench[0] = 0.0; //-Force(0);//Force(0);
-  wrench_msg.wrench[1] = 0.0; //-Force(1);//Force(1);
-  wrench_msg.wrench[2] = 0.0; //-Force(2);
-  wrench_msg.wrench[3] = 0.0; // Force(3);
-  wrench_msg.wrench[4] = 0.0; // Force(4);
-  wrench_msg.wrench[5] = 0.0; // Force(5);
-
-  wrench_msg.joint_position[0] = initial_joint_positions(0);
-  wrench_msg.joint_position[1] = initial_joint_positions(1);
-  wrench_msg.joint_position[2] = initial_joint_positions(2);
-  wrench_msg.joint_position[3] = initial_joint_positions(3);
-  wrench_msg.joint_position[4] = initial_joint_positions(4);
-  wrench_msg.joint_position[5] = initial_joint_positions(5);
-  wrench_msg.joint_position[6] = initial_joint_positions(6);
-
-  m_wrench_publisher->publish(wrench_msg);
 
   // Compute the null space torque
   q_null_space = m_q_starting_pose;
