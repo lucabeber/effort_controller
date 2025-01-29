@@ -1,12 +1,16 @@
 #ifndef EFFORT_IMPEDANCE_CONTROLLER_H_INCLUDED
 #define EFFORT_IMPEDANCE_CONTROLLER_H_INCLUDED
 
+#include <effort_controller_base/effort_controller_base.h>
+
+#include <controller_interface/controller_interface.hpp>
+
+#include "controller_interface/controller_interface.hpp"
+#include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
-#include <controller_interface/controller_interface.hpp>
-#include <effort_controller_base/effort_controller_base.h>
 #include "std_msgs/msg/float64_multi_array.hpp"
-#include "compute_D.hpp"
+
 namespace joint_impedance_controller {
 
 /**
@@ -34,7 +38,7 @@ namespace joint_impedance_controller {
  */
 class JointImpedanceController
     : public virtual effort_controller_base::EffortControllerBase {
-public:
+ public:
   JointImpedanceController();
 
   virtual LifecycleNodeInterface::CallbackReturn on_init() override;
@@ -48,8 +52,8 @@ public:
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
 
-  controller_interface::return_type
-  update(const rclcpp::Time &time, const rclcpp::Duration &period) override;
+  controller_interface::return_type update(
+      const rclcpp::Time &time, const rclcpp::Duration &period) override;
 
   ctrl::VectorND computeTorque();
 
@@ -62,13 +66,13 @@ public:
   double m_null_space_damping;
   ctrl::Vector6D m_target_wrench;
 
-private:
+ private:
   ctrl::Vector6D compensateGravity();
 
   void targetWrenchCallback(
       const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
-  void
-  targetFrameCallback(const geometry_msgs::msg::PoseStamped::SharedPtr target);
+  void targetFrameCallback(
+      const geometry_msgs::msg::PoseStamped::SharedPtr target);
   ctrl::Vector6D computeMotionError();
 
   rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
@@ -105,6 +109,6 @@ private:
   bool m_hand_frame_control;
 };
 
-} // namespace joint_impedance_controller
+}  // namespace joint_impedance_controller
 
 #endif

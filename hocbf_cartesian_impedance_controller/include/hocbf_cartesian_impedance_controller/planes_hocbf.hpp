@@ -1,6 +1,5 @@
 #ifndef PLANES_CBF_QP_HPP
 #define PLANES_CBF_QP_HPP
-#include "pseudo_inversion.h"
 #include "qp_wrapper.hpp"
 namespace planes_hocbf {
 
@@ -62,19 +61,19 @@ double log_psi2_linear(const Eigen::VectorXd& F_u,
   const double dot_h_ = dot_h(dot_x1, n);
   const double ddot_h_ = ddot_h(dot_x2, n);
   // return ddot_h_ + k * dot_h_ + k * std::sqrt(dot_h_ + k * h_);
-<<<<<<< HEAD
   return ddot_h_ + 2 * k1 * dot_h_ + k2 * k2 * h_;
-=======
-  return ddot_h_ + 2 * k * dot_h_ + k * k * h_;
->>>>>>> 9b740ac5e4edf22e8092db171edc0c721d875a18
 }
 
 // psi_2 A matrix
 Eigen::Vector3d psi2_A(const Eigen::MatrixXd& Lambda, const Eigen::Vector3d n) {
-  Eigen::MatrixXd Lambda_inv = Lambda.inverse();
-  return n.transpose() * Lambda_inv.block(0, 0, 3, 3);
-  // auto Lambda_inv = Lambda.inverse();
-  // return n.dot(Lambda_inv.block(0, 0, 3, 3));
+  // Eigen::MatrixXd Lambda_inv = Lambda.inverse();
+  // return n.transpose() * Lambda_inv.block(0, 0, 3, 3);
+  Eigen::MatrixXd Lambda_pos = Lambda.block(0, 0, 3, 3);
+  // Eigen::MatrixXd Lambda_inv = Lambda_pos.inverse();
+  // std::cout << "Lambda_inv_block vs Lambda_block_inv\n"
+  //           << Lambda_inv.block(0, 0, 3, 3) << std::endl
+  //           << Lambda_pos.inverse() << std::endl;
+  return n.transpose() * Lambda_pos.inverse();
 }
 double linear_psi2_b(const Eigen::MatrixXd& Lambda, const Eigen::VectorXd& mu,
                      const Eigen::Vector3d& x, const Eigen::Vector3d& dot_x,

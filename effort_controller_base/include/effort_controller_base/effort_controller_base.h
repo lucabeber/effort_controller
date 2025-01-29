@@ -34,13 +34,12 @@
 
 #include "controller_interface/controller_interface.hpp"
 #include "controller_interface/helpers.hpp"
+#include "double_diagonalization.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "pseudo_inversion.h"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "std_msgs/msg/string.hpp"
-#include "lbr_fri_idl/msg/lbr_state.hpp"
-#include "std_msgs/msg/float64_multi_array.hpp"
-
 namespace effort_controller_base {
 
 class RobotDescriptionListener : public rclcpp::Node {

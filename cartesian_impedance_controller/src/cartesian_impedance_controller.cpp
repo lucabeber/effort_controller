@@ -1,8 +1,4 @@
 #include <cartesian_impedance_controller/cartesian_impedance_controller.h>
-#include <cartesian_impedance_controller/pseudo_inversion.h>
-
-#include "controller_interface/controller_interface.hpp"
-#include "effort_controller_base/Utility.h"
 
 namespace cartesian_impedance_controller {
 
@@ -164,9 +160,8 @@ CartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type
-CartesianImpedanceController::update(const rclcpp::Time &time,
-                                     const rclcpp::Duration &period) {
+controller_interface::return_type CartesianImpedanceController::update(
+    const rclcpp::Time &time, const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -194,7 +189,7 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -269,16 +264,17 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
       (jac * inertia_matrix.data.inverse() * jac.transpose()).inverse();
 
   Eigen::MatrixXd K_d = base_link_stiffness;
-  auto D_d = computeD(Lambda, K_d, 1.0);
+  auto D_d = compute_correct_damping(Lambda, K_d, 0.7);
 
   // RCLCPP_INFO_STREAM(get_node()->get_logger(), "..............D_d: \n" <<
   // D_d);
 
   // Compute the task torque
   tau_task = jac.transpose() * (K_d * motion_error - (D_d * (jac * q_dot)));
-  tau_task_old = jac.transpose() * (base_link_stiffness * motion_error -
-                                    (base_link_damping * (jac * q_dot)));
 
+  ctrl::VectorND tau_task_old(Base::m_joint_number);
+  tau_task_old = jac.transpose() * (base_link_damping * motion_error -
+                                    (base_link_damping * (jac * q_dot)));
 
   // Compute the null space torque
   q_null_space = m_q_starting_pose;
@@ -312,7 +308,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   for (size_t i = 0; i < Base::m_joint_number; i++) {
     datas.data.push_back(tau_task_old(i));
   }
-  double dt = 0.001; //*get_node()->get_clock()->now().seconds() - m_last_time;
+  double dt = 0.001;  //*get_node()->get_clock()->now().seconds() - m_last_time;
   // m_last_time = *get_node()->get_clock()->now().seconds();
 
   double tmp = (q_dot(0) - m_vel_old) / dt;
@@ -363,7 +359,7 @@ void CartesianImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-} // namespace cartesian_impedance_controller
+}  // namespace cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>
