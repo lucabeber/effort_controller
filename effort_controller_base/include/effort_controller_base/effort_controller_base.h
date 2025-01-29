@@ -5,6 +5,7 @@
 #include <urdf/model.h>
 #include <urdf_model/joint.h>
 
+#include "chainjnttojacdotsolver.hpp"
 #include <cmath>
 #include <controller_interface/controller_interface.hpp>
 #include <functional>
@@ -17,7 +18,6 @@
 #include <kdl/chainfksolvervel_recursive.hpp>
 #include <kdl/chainiksolverpos_nr_jl.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
-#include <kdl/chainjnttojacsolver.hpp>
 #include <kdl/frames.hpp>
 #include <kdl/jacobian.hpp>
 #include <kdl/jntarray.hpp>
@@ -36,22 +36,22 @@
 #include "controller_interface/helpers.hpp"
 #include "double_diagonalization.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "lbr_fri_idl/msg/lbr_state.hpp"
 #include "pseudo_inversion.h"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
-#include "std_msgs/msg/string.hpp"
-#include "lbr_fri_idl/msg/lbr_state.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "std_msgs/msg/string.hpp"
 
 namespace effort_controller_base {
 
 class RobotDescriptionListener : public rclcpp::Node {
- public:
+public:
   RobotDescriptionListener(std::shared_ptr<std::string> robot_description_ptr,
                            const std::string &topic_name);
   bool m_description_received_ = false;
 
- private:
+private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr m_description_sub_;
   std::shared_ptr<std::string> m_robot_description_ptr_;
 };
@@ -67,7 +67,7 @@ class RobotDescriptionListener : public rclcpp::Node {
  *
  */
 class EffortControllerBase : public controller_interface::ControllerInterface {
- public:
+public:
   EffortControllerBase();
   virtual ~EffortControllerBase(){};
 
@@ -88,7 +88,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
 
- protected:
+protected:
   /**
    * @brief Write joint control commands to the real hardware
    *
@@ -175,9 +175,10 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
                          ctrl::VectorND &simulated_joint_positions);
 
   KDL::Chain m_robot_chain;
-  KDL::Jacobian m_jacobian;  // Jacobian
+  KDL::Jacobian m_jacobian; // Jacobian
 
   std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
+  std::shared_ptr<KDL::ChainJntToJacDotSolver> m_jnt_to_jac_dot_solver;
   std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
   std::shared_ptr<KDL::ChainFkSolverPos_recursive> m_fk_solver;
   std::shared_ptr<KDL::ChainIkSolverPos_NR_JL> m_ik_solver;
@@ -200,11 +201,12 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
       m_joint_state_pos_handles;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
       m_joint_state_vel_handles;
-  rclcpp::Subscription<lbr_fri_idl::msg::LBRState>::SharedPtr m_lbr_state_subscriber;
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr m_commanded_torque_publisher;
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr m_measured_torque_publisher;
-
-
+  rclcpp::Subscription<lbr_fri_idl::msg::LBRState>::SharedPtr
+      m_lbr_state_subscriber;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
+      m_commanded_torque_publisher;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
+      m_measured_torque_publisher;
 
   size_t m_joint_number;
 
@@ -212,7 +214,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   KDL::JntArray m_joint_velocities;
   KDL::JntArray m_simulated_joint_motion;
 
- private:
+private:
   std::vector<std::string> m_cmd_interface_types;
   std::vector<std::string> m_state_interface_types;
   std::vector<
@@ -241,6 +243,6 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   bool m_kuka_hw;
 };
 
-}  // namespace effort_controller_base
+} // namespace effort_controller_base
 
 #endif

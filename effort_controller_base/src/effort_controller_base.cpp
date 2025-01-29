@@ -274,6 +274,7 @@ EffortControllerBase::on_configure(
       m_robot_chain, lower_pos_limits, upper_pos_limits, *m_fk_solver,
       *m_ik_solver_vel, 100, 1e-6));
   m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
+  m_jnt_to_jac_dot_solver.reset(new KDL::ChainJntToJacDotSolver(m_robot_chain));
   m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain, grav));
   RCLCPP_INFO(get_node()->get_logger(),
               "Finished initializing kinematics solvers");
@@ -363,27 +364,27 @@ EffortControllerBase::on_activate(
 
   // Get command handles.
   // Position
-  if (m_kuka_hw == true) {
-    if (!controller_interface::get_ordered_interfaces(
-            command_interfaces_, m_joint_names,
-            hardware_interface::HW_IF_POSITION, m_joint_cmd_pos_handles)) {
-      RCLCPP_ERROR(get_node()->get_logger(),
-                   "Expected %zu '%s' command interfaces, got %zu.",
-                   m_joint_number, hardware_interface::HW_IF_POSITION,
-                   m_joint_cmd_pos_handles.size());
-      return CallbackReturn::ERROR;
-    }
-  }
+  // if (m_kuka_hw == true) {
+  //   if (!controller_interface::get_ordered_interfaces(
+  //           command_interfaces_, m_joint_names,
+  //           hardware_interface::HW_IF_POSITION, m_joint_cmd_pos_handles)) {
+  //     RCLCPP_ERROR(get_node()->get_logger(),
+  //                  "Expected %zu '%s' command interfaces, got %zu.",
+  //                  m_joint_number, hardware_interface::HW_IF_POSITION,
+  //                  m_joint_cmd_pos_handles.size());
+  //     return CallbackReturn::ERROR;
+  //   }
+  // }
   // Effort
-  if (!controller_interface::get_ordered_interfaces(
-          command_interfaces_, m_joint_names, hardware_interface::HW_IF_EFFORT,
-          m_joint_cmd_eff_handles)) {
-    RCLCPP_ERROR(get_node()->get_logger(),
-                 "Expected %zu '%s' command interfaces, got %zu.",
-                 m_joint_number, hardware_interface::HW_IF_EFFORT,
-                 m_joint_cmd_eff_handles.size());
-    return CallbackReturn::ERROR;
-  }
+  // if (!controller_interface::get_ordered_interfaces(
+  //         command_interfaces_, m_joint_names, hardware_interface::HW_IF_EFFORT,
+  //         m_joint_cmd_eff_handles)) {
+  //   RCLCPP_ERROR(get_node()->get_logger(),
+  //                "Expected %zu '%s' command interfaces, got %zu.",
+  //                m_joint_number, hardware_interface::HW_IF_EFFORT,
+  //                m_joint_cmd_eff_handles.size());
+  //   return CallbackReturn::ERROR;
+  // }
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished getting command interfaces");
   // Get state handles.
@@ -452,16 +453,16 @@ void EffortControllerBase::writeJointEffortCmds() {
 
 void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND &tau) {
   // Saturation of torque rate
-  for (size_t i = 0; i < m_joint_number; i++) {
-    const double difference = tau[i] - m_efforts[i];
-    m_efforts[i] +=
-        std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
-    if (std::abs(difference) > m_delta_tau_max) {
-      // RCLCPP_WARN(get_node()->get_logger(),
-      //             "Joint %s effort rate saturated, was: %f",
-      //             m_joint_names[i].c_str(), tau[i]);
-    }
-  }
+  // for (size_t i = 0; i < m_joint_number; i++) {
+  //   const double difference = tau[i] - m_efforts[i];
+  //   m_efforts[i] +=
+  //       std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
+  //   if (std::abs(difference) > m_delta_tau_max) {
+  //     // RCLCPP_WARN(get_node()->get_logger(),
+  //     //             "Joint %s effort rate saturated, was: %f",
+  //     //             m_joint_names[i].c_str(), tau[i]);
+  //   }
+  // }
 }
 
 void EffortControllerBase::computeIKSolution(
