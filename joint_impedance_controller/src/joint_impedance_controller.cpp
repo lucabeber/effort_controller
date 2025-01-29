@@ -248,41 +248,23 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
   KDL::JntSpaceInertiaMatrix inertia_matrix(Base::m_joint_number);
   m_dyn_solver->JntToMass(Base::m_joint_positions, inertia_matrix);
 
-<<<<<<< HEAD
-  Eigen::MatrixXd M = inertia_matrix.data;
-  Eigen::MatrixXd K_d = m_joint_stiffness.asDiagonal();
-
-  auto D_d = computeD(M, K_d, 0.7);
-=======
   // Eigen::MatrixXd M = inertia_matrix.data;
   // Eigen::MatrixXd K_d = m_joint_stiffness.asDiagonal();
 
   // auto D_d = compute_correct_damping(M, K_d, 0.7);
->>>>>>> 2b539dd6e79279a064c55f70f33eb7d88cc32f7e
 
   std_msgs::msg::Float64MultiArray datas;
   // Compute the desired joint torques
   for (size_t i = 0; i < Base::m_joint_number; i++) {
-<<<<<<< HEAD
-    tau_task(i) =
-        m_joint_stiffness(i) * (m_q_desired(i) - q(i)) - D_d(i) * q_dot(i);
-    datas.data.push_back(tau_task(i));
-    // tau_task(i) = 0.0;
-=======
     tau_task(i) = m_joint_stiffness(i) * (m_q_desired(i) - q(i)) -
                   m_joint_damping(i) * q_dot(i);
     datas.data.push_back(-tau_task(i));
     tau_task(i) = 0.0;
->>>>>>> 2b539dd6e79279a064c55f70f33eb7d88cc32f7e
   }
   for (size_t i = 0; i < Base::m_joint_number; i++) {
     double tau_old = m_joint_stiffness(i) * (m_q_desired(i) - q(i)) -
                      m_joint_damping(i) * q_dot(i);
-<<<<<<< HEAD
-    datas.data.push_back(tau_old);
-=======
     datas.data.push_back(-tau_old);
->>>>>>> 2b539dd6e79279a064c55f70f33eb7d88cc32f7e
   }
   ctrl::VectorND tau = tau_task;
 
