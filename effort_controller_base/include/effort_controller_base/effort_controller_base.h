@@ -36,7 +36,6 @@
 #include "controller_interface/helpers.hpp"
 #include "double_diagonalization.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
-#include "lbr_fri_idl/msg/lbr_state.hpp"
 #include "pseudo_inversion.h"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
@@ -201,18 +200,13 @@ protected:
       m_joint_state_pos_handles;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
       m_joint_state_vel_handles;
-  rclcpp::Subscription<lbr_fri_idl::msg::LBRState>::SharedPtr
-      m_lbr_state_subscriber;
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
-      m_commanded_torque_publisher;
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
-      m_measured_torque_publisher;
-
   size_t m_joint_number;
 
   KDL::JntArray m_joint_positions;
   KDL::JntArray m_joint_velocities;
+  KDL::JntArray m_old_joint_velocities;
   KDL::JntArray m_simulated_joint_motion;
+
 
 private:
   std::vector<std::string> m_cmd_interface_types;
@@ -232,7 +226,8 @@ private:
   bool m_initialized = {false};
   bool m_configured = {false};
   bool m_active = {false};
-
+  // joint velocity filter
+  const double m_dotq_alpha = 0.3;
   // Dynamic parameters
   std::string m_robot_description;
 

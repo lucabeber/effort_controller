@@ -74,11 +74,6 @@ class CBFCartesianImpedanceController
 
   ctrl::MatrixND m_identity;
   ctrl::VectorND m_q_starting_pose;
-  ctrl::VectorND m_tau_old;
-
-  ctrl::Vector3D m_old_rot_error;
-  ctrl::VectorND m_old_vel_error;
-  double const m_alpha = 0.3;
   rclcpp::Time m_last_time;
 
   bool m_received_initial_frame = false;

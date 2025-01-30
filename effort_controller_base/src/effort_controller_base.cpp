@@ -107,30 +107,6 @@ EffortControllerBase::on_init() {
     m_robot_description = *robot_description_ptr;
   }
 
-  m_commanded_torque_publisher =
-      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
-          get_node()->get_name() + std::string("/commanded_torque"), 1);
-  m_measured_torque_publisher =
-      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
-          get_node()->get_name() + std::string("/measured_torque"), 1);
-
-  m_lbr_state_subscriber =
-      get_node()->create_subscription<lbr_fri_idl::msg::LBRState>(
-          std::string("state"), 1,
-          [this](const lbr_fri_idl::msg::LBRState::SharedPtr msg) {
-            std_msgs::msg::Float64MultiArray datas;
-            for (size_t i = 0; i < m_joint_number; i++) {
-              datas.data.push_back(-msg->commanded_torque[i]);
-            }
-            m_commanded_torque_publisher->publish(datas);
-            datas.data.clear();
-            for(size_t i = 0; i < m_joint_number; i++) {
-              datas.data.push_back(-msg->measured_torque[i]);
-            }
-            m_measured_torque_publisher->publish(datas);
-          });
-  
-
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -558,15 +534,12 @@ void EffortControllerBase::updateJointStates() {
     const auto &velocity_interface = m_joint_state_vel_handles[i].get();
 
     m_joint_positions(i) = position_interface.get_value();
-    m_joint_velocities(i) = velocity_interface.get_value();
-
-    // std::transform(m_joint_positions.begin(), m_joint_positions.end(),
-    // m_joint_positions.begin(),
-    // [](double val) -> double {
-    //     return std::round(val * 10000) / 10000;
-    // });
-    // Rount to 4 decimal places
-    // m_joint_positions(i) = std::round(m_joint_positions(i) * 10000) / 10000;
+    m_joint_velocities(i) =
+        std::round((m_dotq_alpha * velocity_interface.get_value() +
+                    (1 - m_dotq_alpha) * m_old_joint_velocities(i)) *
+                   10000) /
+        10000;
+    m_old_joint_velocities(i) = m_joint_velocities(i);
   }
 }
 

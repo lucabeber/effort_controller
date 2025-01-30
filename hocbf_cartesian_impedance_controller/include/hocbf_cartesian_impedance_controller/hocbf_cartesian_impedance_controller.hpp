@@ -73,10 +73,7 @@ class HOCBFCartesianImpedanceController
 
   ctrl::MatrixND m_identity;
   ctrl::VectorND m_q_starting_pose;
-  ctrl::VectorND m_tau_old;
 
-  ctrl::Vector3D m_old_rot_error;
-  ctrl::VectorND m_old_vel_error;
   double const m_alpha = 0.3;
   double m_k1 = 1.0;
   double m_k2 = 1.0;

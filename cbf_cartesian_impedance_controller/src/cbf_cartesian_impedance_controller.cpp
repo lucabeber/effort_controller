@@ -139,13 +139,6 @@ CBFCartesianImpedanceController::on_activate(
 
   m_q_starting_pose = Base::m_joint_positions.data;
 
-  // Initialize the old torque to zero
-  m_tau_old = ctrl::VectorND::Zero(Base::m_joint_number);
-
-  m_old_rot_error = ctrl::Vector3D::Zero();
-
-  m_old_vel_error = ctrl::VectorND::Zero(Base::m_joint_number);
-
   m_target_wrench = ctrl::Vector6D::Zero();
 
   m_last_time = get_node()->get_clock()->now();
@@ -166,8 +159,9 @@ CBFCartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CBFCartesianImpedanceController::update(
-    const rclcpp::Time &time, const rclcpp::Duration &period) {
+controller_interface::return_type
+CBFCartesianImpedanceController::update(const rclcpp::Time &time,
+                                        const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -195,7 +189,7 @@ ctrl::Vector6D CBFCartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -296,13 +290,6 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number),
       tau_ext(Base::m_joint_number);
 
-  // Filter the velocity errorm_old_vel_error
-  // q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
-  // for (int i = 0; i < q_dot.size(); i++) {
-  //   q_dot(i) = std::round(q_dot(i) * 1000) / 1000;
-  // }
-  // m_old_vel_error = q_dot;
-
   // Compute the stiffness and damping in the base link
   const auto base_link_stiffness =
       Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
@@ -380,7 +367,7 @@ void CBFCartesianImpedanceController::targetFrameCallback(
     m_received_initial_frame = true;
   }
 }
-}  // namespace cbf_cartesian_impedance_controller
+} // namespace cbf_cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

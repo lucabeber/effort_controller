@@ -97,8 +97,6 @@ class JointImpedanceController
   double m_last_time = 0.0;
   double current_acc_j0 = 0.0;
 
-  ctrl::Vector3D m_old_rot_error;
-  ctrl::VectorND m_old_vel_error;
   double const m_alpha = 0.3;
   /**
    * Allow users to choose whether to specify their target wrenches in the

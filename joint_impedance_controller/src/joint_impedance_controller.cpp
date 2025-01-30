@@ -132,12 +132,6 @@ JointImpedanceController::on_activate(
   m_q_desired = Base::m_joint_positions.data;
   m_q_starting_pose = Base::m_joint_positions.data;
 
-  m_old_rot_error = ctrl::Vector3D::Zero();
-
-  m_old_vel_error = ctrl::VectorND::Zero(Base::m_joint_number);
-
-  m_target_wrench = ctrl::Vector6D::Zero();
-
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -211,8 +205,6 @@ ctrl::Vector6D JointImpedanceController::computeMotionError() {
 }
 
 ctrl::VectorND JointImpedanceController::computeTorque() {
-  // Find the desired joints positions
-  // Base::computeNullSpace(m_target_frame);
 
   // Compute the inverse kinematics
   Base::computeIKSolution(m_target_frame, m_q_desired);
@@ -237,24 +229,6 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
   KDL::JntSpaceInertiaMatrix inertia_matrix(Base::m_joint_number);
   m_dyn_solver->JntToMass(Base::m_joint_positions, inertia_matrix);
 
-  // Eigen::MatrixXd M = inertia_matrix.data;
-  // Eigen::MatrixXd K_d = m_joint_stiffness.asDiagonal();
-
-  // auto D_d = compute_correct_damping(M, K_d, 0.7);
-
-  std_msgs::msg::Float64MultiArray datas;
-  // Compute the desired joint torques
-  for (size_t i = 0; i < Base::m_joint_number; i++) {
-    tau_task(i) = m_joint_stiffness(i) * (m_q_desired(i) - q(i)) -
-                  m_joint_damping(i) * q_dot(i);
-    datas.data.push_back(-tau_task(i));
-    tau_task(i) = 0.0;
-  }
-  for (size_t i = 0; i < Base::m_joint_number; i++) {
-    double tau_old = m_joint_stiffness(i) * (m_q_desired(i) - q(i)) -
-                     m_joint_damping(i) * q_dot(i);
-    datas.data.push_back(-tau_old);
-  }
   ctrl::VectorND tau = tau_task;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
@@ -268,25 +242,7 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
     Base::m_dyn_solver->JntToCoriolis(Base::m_joint_positions,
                                       Base::m_joint_velocities, tau_coriolis);
     tau = tau + tau_coriolis.data;
-    // RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau coriolis: " <<
-    // tau_coriolis.data.transpose());
   }
-
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "tau control: " << (tau +
-  // tau_gravity.data).transpose());
-
-  // log
-  double dt = 0.001; //*get_node()->get_clock()->now().seconds() - m_last_time;
-  // m_last_time = *get_node()->get_clock()->now().seconds();
-
-  double tmp = (q_dot(0) - m_vel_old) / dt;
-  current_acc_j0 = 0.1 * tmp + 0.9 * current_acc_j0;
-  m_vel_old = q_dot(0);
-  Eigen::VectorXd tau_corioliss = tau_coriolis.data;
-  // datas.data.push_back(tau_corioliss(0));
-  datas.data.push_back(q_dot(0) * 200.0);
-  datas.data.push_back(current_acc_j0 * 100.0);
-  m_data_publisher->publish(datas);
 
   return tau;
 }

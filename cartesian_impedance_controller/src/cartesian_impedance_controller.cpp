@@ -29,7 +29,6 @@ CartesianImpedanceController::on_init() {
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
-  ;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
@@ -110,9 +109,8 @@ CartesianImpedanceController::on_configure(
           get_node()->get_name() + std::string("/target_frame"), 3,
           std::bind(&CartesianImpedanceController::targetFrameCallback, this,
                     std::placeholders::_1));
-  m_data_publisher =
-      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
-          get_node()->get_name() + std::string("/data"), 1);
+  m_data_publisher = get_node()->create_publisher<debug_msg::msg::Debug>(
+      get_node()->get_name() + std::string("/data"), 1);
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -136,13 +134,6 @@ CartesianImpedanceController::on_activate(
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_activate");
 
   m_q_starting_pose = Base::m_joint_positions.data;
-
-  // Initialize the old torque to zero
-  m_tau_old = ctrl::VectorND::Zero(Base::m_joint_number);
-
-  m_old_rot_error = ctrl::Vector3D::Zero();
-
-  m_old_vel_error = ctrl::VectorND::Zero(Base::m_joint_number);
 
   m_target_wrench = ctrl::Vector6D::Zero();
 
@@ -222,6 +213,8 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
+  debug_msg::msg::Debug debug_msg;
+
   // Compute the jacobian
   Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions,
                                       Base::m_jacobian);
@@ -256,18 +249,13 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   tau_task_old.setZero();
   tau_task.setZero();
   tau_null.setZero();
-  
-
-  // Filter the velocity error
-  q_dot = m_alpha * q_dot + (1 - m_alpha) * m_old_vel_error;
-  for (int i = 0; i < q_dot.size(); i++) {
-    q_dot(i) = std::round(q_dot(i) * 1000) / 1000;
-  }
-  m_old_vel_error = q_dot;
 
   // Compute the stiffness and damping in the base link
   const auto base_link_stiffness =
       Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
+
+  RCLCPP_INFO_STREAM(get_node()->get_logger(), "Stiffness: \n"
+                                                   << base_link_stiffness);
 
   // const auto base_link_damping =
   //     Base::displayInBaseLink(m_cartesian_damping,
@@ -277,21 +265,21 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   Eigen::VectorXd damping_correction = 5.0 * Eigen::VectorXd::Ones(6);
   auto D_d = compute_correct_damping(Lambda, K_d, 1.0);
 
-  for(int i = 0; i < 6; i++){
-    D_d(i,i) = D_d(i,i) + damping_correction(i);
-  }
-
+  // for(int i = 5; i < 6; i++){
+  D_d(3, 3) = D_d(3, 3) + damping_correction(3);
+  // }
 
   // Compute the task torque
   Eigen::VectorXd Force = (K_d * motion_error - (D_d * (jac * q_dot)));
   tau_task = jac.transpose() * Force;
 
+  Eigen::VectorXd stiffness_torque = jac.transpose() * (K_d * motion_error);
+  Eigen::VectorXd damping_torque = jac.transpose() * -(D_d * (jac * q_dot));
+
   // // add damping force for orientation
   // Eigen::VectorXd damping_force = (4 * K_d.cwiseSqrt() * (jac * q_dot));
   // damping_force.head(3) << 0, 0, 0;
   // Force = Force - damping_force;
-
-  std_msgs::msg::Float64MultiArray datas;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
@@ -339,11 +327,21 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
     tau_null = ctrl::VectorND::Zero(Base::m_joint_number);
   }
 
+  for (int i = 0; i < 7; i++) {
+    debug_msg.stiffness_torque[i] = stiffness_torque(i);
+    debug_msg.damping_torque[i] = damping_torque(i);
+    debug_msg.coriolis_torque[i] = tau_coriolis(i);
+    debug_msg.nullspace_torque[i] = tau_null(i);
+    if (i < 6) {
+      debug_msg.impedance_force[i] = Force(i);
+    }
+  }
+
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
   tau += tau_task + tau_null + tau_ext;
-  m_data_publisher->publish(datas);
+  m_data_publisher->publish(debug_msg);
 
   return tau;
 }
