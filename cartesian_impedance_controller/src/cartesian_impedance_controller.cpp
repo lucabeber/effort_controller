@@ -274,11 +274,22 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   //     Base::m_end_effector_link);
 
   Eigen::MatrixXd K_d = base_link_stiffness;
+  Eigen::VectorXd damping_correction = 5.0 * Eigen::VectorXd::Ones(6);
   auto D_d = compute_correct_damping(Lambda, K_d, 1.0);
+
+  for(int i = 0; i < 6; i++){
+    D_d(i,i) = D_d(i,i) + damping_correction(i);
+  }
+
 
   // Compute the task torque
   Eigen::VectorXd Force = (K_d * motion_error - (D_d * (jac * q_dot)));
   tau_task = jac.transpose() * Force;
+
+  // // add damping force for orientation
+  // Eigen::VectorXd damping_force = (4 * K_d.cwiseSqrt() * (jac * q_dot));
+  // damping_force.head(3) << 0, 0, 0;
+  // Force = Force - damping_force;
 
   std_msgs::msg::Float64MultiArray datas;
 

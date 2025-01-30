@@ -11,6 +11,10 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(effort_controller_base REQUIRED)
 find_package(visualization_msgs REQUIRED)
+# build in release
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 set(QPOASES_INSTALL_DIR ${CMAKE_BINARY_DIR}/qpoases_install)
 include(ExternalProject)
 ExternalProject_Add(

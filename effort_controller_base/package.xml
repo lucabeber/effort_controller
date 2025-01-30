@@ -16,4 +16,5 @@
   <depend>kdl_parser</depend>
   <depend>trajectory_msgs</depend>
   <depend>pluginlib</depend>
+  <depend>lbr_fri_idl</depend>
 </package>
