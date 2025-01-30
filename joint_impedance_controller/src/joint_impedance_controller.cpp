@@ -51,20 +51,18 @@ JointImpedanceController::on_configure(
   }
 
   // Set stiffness
-  ctrl::VectorND tmp(Base::m_joint_number);
-  for (size_t i = 1; i <= Base::m_joint_number; i++) {
-    tmp(i - 1) = get_node()
-                     ->get_parameter("stiffness.joint" + std::to_string(i))
-                     .as_double();
-  }
-
   m_joint_stiffness = ctrl::VectorND::Zero(Base::m_joint_number);
-  m_joint_stiffness = tmp;
+  for (size_t i = 1; i <= Base::m_joint_number; i++) {
+    m_joint_stiffness(i - 1) =
+        get_node()
+            ->get_parameter("stiffness.joint" + std::to_string(i))
+            .as_double();
+  }
 
   // Set damping
   m_joint_damping = ctrl::VectorND::Zero(Base::m_joint_number);
 
-  m_joint_damping = 2 * 0.70 * m_joint_stiffness.cwiseSqrt();
+  m_joint_damping = 2 * m_joint_stiffness.cwiseSqrt();
 
   RCLCPP_INFO_STREAM(get_node()->get_logger(),
                      "Joint stiffness: " << m_joint_stiffness.transpose());
@@ -81,9 +79,6 @@ JointImpedanceController::on_configure(
 
   // Set the identity matrix with dimension of the joint space
   m_identity = ctrl::MatrixND::Identity(m_joint_number, m_joint_number);
-
-  // Make sure sensor wrenches are interpreted correctly
-  // setFtSensorReferenceFrame(Base::m_end_effector_link);
 
   m_target_wrench_subscriber =
       get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
@@ -104,9 +99,8 @@ JointImpedanceController::on_configure(
           std::bind(&JointImpedanceController::targetFrameCallback, this,
                     std::placeholders::_1));
 
-  m_data_publisher =
-      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
-          get_node()->get_name() + std::string("/data"), 10);
+  m_data_publisher = get_node()->create_publisher<debug_msg::msg::Debug>(
+      get_node()->get_name() + std::string("/data"), 1);
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -149,9 +143,8 @@ JointImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type
-JointImpedanceController::update(const rclcpp::Time &time,
-                                 const rclcpp::Duration &period) {
+controller_interface::return_type JointImpedanceController::update(
+    const rclcpp::Time &time, const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -179,7 +172,7 @@ ctrl::Vector6D JointImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -205,7 +198,6 @@ ctrl::Vector6D JointImpedanceController::computeMotionError() {
 }
 
 ctrl::VectorND JointImpedanceController::computeTorque() {
-
   // Compute the inverse kinematics
   Base::computeIKSolution(m_target_frame, m_q_desired);
 
@@ -215,19 +207,17 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
 
   // Compute the pseudo-inverse of the jacobian
   ctrl::MatrixND jac = Base::m_jacobian.data;
-  ctrl::MatrixND jac_tran_pseudo_inverse;
-
-  pseudoInverse(jac.transpose(), &jac_tran_pseudo_inverse);
-
-  // Compute the desired joint positions
 
   // Redefine joints velocities in Eigen format
   ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
   ctrl::VectorND tau_task(Base::m_joint_number);
 
-  KDL::JntSpaceInertiaMatrix inertia_matrix(Base::m_joint_number);
-  m_dyn_solver->JntToMass(Base::m_joint_positions, inertia_matrix);
+  // Compute the task joint torques
+  Eigen::VectorXd stiffness_torque =
+      m_joint_stiffness.cwiseProduct((m_q_desired - q));
+  Eigen::VectorXd damping_torque = -m_joint_damping.cwiseProduct(q_dot);
+  tau_task = stiffness_torque + damping_torque;
 
   ctrl::VectorND tau = tau_task;
 
@@ -243,6 +233,16 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
                                       Base::m_joint_velocities, tau_coriolis);
     tau = tau + tau_coriolis.data;
   }
+  // TODO add nullspace projector
+#if DEBUG
+  for (int i = 0; i < 7; i++) {
+    debug_msg.stiffness_torque[i] = stiffness_torque(i);
+    debug_msg.damping_torque[i] = damping_torque(i);
+    debug_msg.coriolis_torque[i] = tau_coriolis(i);
+    // debug_msg.nullspace_torque[i] = tau_null(i);
+  }
+  m_data_publisher->publish(debug_msg);
+#endif
 
   return tau;
 }
@@ -283,7 +283,7 @@ void JointImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-} // namespace joint_impedance_controller
+}  // namespace joint_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

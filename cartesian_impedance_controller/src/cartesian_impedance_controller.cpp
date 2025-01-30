@@ -154,9 +154,8 @@ CartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type
-CartesianImpedanceController::update(const rclcpp::Time &time,
-                                     const rclcpp::Duration &period) {
+controller_interface::return_type CartesianImpedanceController::update(
+    const rclcpp::Time &time, const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -184,7 +183,7 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -263,18 +262,11 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   for (int i = 5; i < 6; i++) {
     D_d(i, i) = D_d(i, i) + damping_correction(3);
   }
-
-  // Compute the task torque
-  Eigen::VectorXd Force = (K_d * motion_error - (D_d * (jac * q_dot)));
-  tau_task = jac.transpose() * Force;
-
   Eigen::VectorXd stiffness_torque = jac.transpose() * (K_d * motion_error);
   Eigen::VectorXd damping_torque = jac.transpose() * -(D_d * (jac * q_dot));
 
-  // // add damping force for orientation
-  // Eigen::VectorXd damping_force = (4 * K_d.cwiseSqrt() * (jac * q_dot));
-  // damping_force.head(3) << 0, 0, 0;
-  // Force = Force - damping_force;
+  // Compute the task torque
+  tau_task = stiffness_torque + damping_torque;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
@@ -303,16 +295,10 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
         jac.transpose() * Lambda * jac_dot_q_dot_eigen;
     tau = tau + j_tran_lambda_jdot_qdot;
   }
-  // datas.data.push_back(tau(0) + j_tran_lambda_jdot_qdot(0));
-  // datas.data.push_back(tau(0));
-
-  // add norm of j_tran_lambda_jdot_qdot
-  // datas.data.push_back(j_tran_lambda_jdot_qdot.norm());
 
   // Compute the null space torque
   q_null_space = m_q_starting_pose;
   if (m_null_space_stiffness > 1e-6) {
-
     // Compute dynamically consistent null space projector
     tau_null =
         (m_identity - jac.transpose() * Lambda * jac * M.data.inverse()) *
@@ -322,6 +308,8 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
     tau_null = ctrl::VectorND::Zero(Base::m_joint_number);
   }
 
+#if DEBUG
+  Eigen::VectorXd Force = K_d * motion_error - D_d * (jac * q_dot);
   for (int i = 0; i < 7; i++) {
     debug_msg.stiffness_torque[i] = stiffness_torque(i);
     debug_msg.damping_torque[i] = damping_torque(i);
@@ -331,12 +319,12 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
       debug_msg.impedance_force[i] = Force(i);
     }
   }
-
+  m_data_publisher->publish(debug_msg);
+#endif
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
   tau += tau_task + tau_null + tau_ext;
-  m_data_publisher->publish(debug_msg);
 
   return tau;
 }
@@ -377,7 +365,7 @@ void CartesianImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-} // namespace cartesian_impedance_controller
+}  // namespace cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

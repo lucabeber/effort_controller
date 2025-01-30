@@ -6,17 +6,18 @@
   <description>The cartesian_impedance_controller package</description>
   <maintainer email="luca.beber@unitn.it">Luca Beber</maintainer>
   <license>BSD</license>
-  <url type="repository">https://github.com/lucabeber/effort_controllers</url> 
-  <author email="luca.beber@unitn.it">Luca Beber</author>  
+  <url type="repository">https://github.com/lucabeber/effort_controllers</url>
+  <author email="luca.beber@unitn.it">Luca Beber</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
   <depend>effort_controller_base</depend>
   <depend>controller_interface</depend>
+  <depend>debug_msg</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
-    <controller_interface plugin="${prefix}/cartesian_impedance_controller_plugin.xml"/>
+    <controller_interface plugin="${prefix}/cartesian_impedance_controller_plugin.xml" />
   </export>
 </package>

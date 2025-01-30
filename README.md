@@ -8,6 +8,5 @@ There is a base controller that communicate with the hardware interface of the r
 For now only a cartesian impedance controller is implemented but also other type of controllers like for example an admittance controller can be easily added. 
 
 Check out their use in the KUKA LBR example [here](https://github.com/idra-lab/kuka_impedance)!  
-This repo also contains a CoppeliaSim hardware interface and scene to test our controllers with simulated Franka robots.
 
 The structure of the code and some libraries have been taken from the repo [Cartesian Controllers](https://github.com/fzi-forschungszentrum-informatik/cartesian_controllers).

@@ -6,11 +6,11 @@
 #include <controller_interface/controller_interface.hpp>
 
 #include "controller_interface/controller_interface.hpp"
+#include "debug_msg/msg/debug.hpp"
 #include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
-#include "std_msgs/msg/float64_multi_array.hpp"
-
+#define DEBUG 0
 namespace joint_impedance_controller {
 
 /**
@@ -79,8 +79,7 @@ class JointImpedanceController
       m_target_wrench_subscriber;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
       m_target_frame_subscriber;
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
-      m_data_publisher;
+  rclcpp::Publisher<debug_msg::msg::Debug>::SharedPtr m_data_publisher;
   KDL::Frame m_target_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;

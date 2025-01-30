@@ -13,12 +13,14 @@ add_definitions(-DEIGEN_MPL2_ONLY)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(effort_controller_base REQUIRED)
+find_package(debug_msg REQUIRED)
 
 # Convenience variable for dependencies
 set(THIS_PACKAGE_INCLUDE_DEPENDS
         rclcpp
         effort_controller_base
         Eigen3
+        debug_msg
 )
 
 ament_export_dependencies(

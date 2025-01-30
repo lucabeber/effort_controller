@@ -23,22 +23,4 @@ rosidl_generate_interfaces(debug_msg
 )
 
 ament_export_dependencies(rosidl_default_runtime)
-
-if (BUILD_TESTING)
-  find_package(ament_cmake_gtest REQUIRED)
-  find_package(FRIClient REQUIRED)
-
-  # link against messages from same package
-  rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
-  add_library(${PROJECT_NAME}_library INTERFACE)
-  target_include_directories(${PROJECT_NAME}_library INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-  )
-  target_link_libraries(${PROJECT_NAME}_library INTERFACE
-    ${cpp_typesupport_target}
-  )
-
-endif()
-
 ament_package()
