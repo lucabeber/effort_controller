@@ -82,12 +82,9 @@ EffortControllerBase::on_init() {
     // append namespace to robot_description topic
     if (std::string(get_node()->get_namespace()).compare("/") == 0) {
       topic_name = "robot_description";
-      RCLCPP_INFO(get_node()->get_logger(), "A");
-
     } else {
       topic_name =
           std::string(get_node()->get_namespace()) + "/robot_description";
-      RCLCPP_INFO(get_node()->get_logger(), "B");
     }
     // create shared pointer to robot description
     auto robot_description_ptr = std::make_shared<std::string>();
@@ -306,7 +303,10 @@ EffortControllerBase::on_configure(
   // Initialize joint state
   m_joint_positions.resize(m_joint_number);
   m_joint_velocities.resize(m_joint_number);
+  m_old_joint_velocities.resize(m_joint_number);
+  m_old_joint_velocities.data.setZero();
   m_simulated_joint_motion.resize(m_joint_number);
+
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Base on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::

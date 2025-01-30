@@ -254,20 +254,15 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   const auto base_link_stiffness =
       Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
 
-  RCLCPP_INFO_STREAM(get_node()->get_logger(), "Stiffness: \n"
-                                                   << base_link_stiffness);
-
-  // const auto base_link_damping =
-  //     Base::displayInBaseLink(m_cartesian_damping,
-  //     Base::m_end_effector_link);
-
   Eigen::MatrixXd K_d = base_link_stiffness;
   Eigen::VectorXd damping_correction = 5.0 * Eigen::VectorXd::Ones(6);
   auto D_d = compute_correct_damping(Lambda, K_d, 1.0);
 
-  // for(int i = 5; i < 6; i++){
-  D_d(3, 3) = D_d(3, 3) + damping_correction(3);
-  // }
+  // add a small damping correction to the diagonal of D_d to account for model
+  // inaccuracies, remove this loop if you face strange behavior
+  for (int i = 5; i < 6; i++) {
+    D_d(i, i) = D_d(i, i) + damping_correction(3);
+  }
 
   // Compute the task torque
   Eigen::VectorXd Force = (K_d * motion_error - (D_d * (jac * q_dot)));

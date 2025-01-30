@@ -231,7 +231,7 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   // Redefine joints velocities in Eigen format
   ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
-  ctrl::VectorND q_null_space = Base::m_simulated_joint_motion.data;
+  ctrl::VectorND q_null_space;
 
   auto current_time = get_node()->get_clock()->now();
   double dt = (current_time - m_last_time).seconds();
