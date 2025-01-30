@@ -1,10 +1,15 @@
 #ifndef EFFORT_IMPEDANCE_CONTROLLER_H_INCLUDED
 #define EFFORT_IMPEDANCE_CONTROLLER_H_INCLUDED
 
+#include <effort_controller_base/effort_controller_base.h>
+
+#include <controller_interface/controller_interface.hpp>
+
+#include "controller_interface/controller_interface.hpp"
+#include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
-#include <controller_interface/controller_interface.hpp>
-#include <effort_controller_base/effort_controller_base.h>
+#include "debug_msg/msg/debug.hpp"
 
 namespace cartesian_impedance_controller {
 
@@ -55,7 +60,7 @@ public:
   using Base = effort_controller_base::EffortControllerBase;
 
   ctrl::Matrix6D m_cartesian_stiffness;
-  ctrl::Matrix6D m_cartesian_damping;
+//   ctrl::Matrix6D m_cartesian_damping;
   double m_null_space_stiffness;
   double m_null_space_damping;
   ctrl::Vector6D m_target_wrench;
@@ -73,6 +78,8 @@ private:
       m_target_wrench_subscriber;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
       m_target_frame_subscriber;
+  rclcpp::Publisher<debug_msg::msg::Debug>::SharedPtr
+      m_data_publisher;
   KDL::Frame m_target_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
@@ -83,11 +90,10 @@ private:
 
   ctrl::MatrixND m_identity;
   ctrl::VectorND m_q_starting_pose;
-  ctrl::VectorND m_tau_old;
 
-  ctrl::Vector3D m_old_rot_error;
-  ctrl::VectorND m_old_vel_error;
-  double const m_alpha = 0.3;
+  double m_vel_old = 0.0;
+  double current_acc_j0 = 0.0;
+  bool m_compensate_dJdq = false;
   /**
    * Allow users to choose whether to specify their target wrenches in the
    * end-effector frame (= True) or the base frame (= False). The first one

@@ -48,7 +48,6 @@ cartesian_impedance_controller:
     nullspace_stiffness: 0.0
     compensate_gravity: false
     compensate_coriolis: false
-    compensate_dJdq: false
 
 
 # More controller specifications here

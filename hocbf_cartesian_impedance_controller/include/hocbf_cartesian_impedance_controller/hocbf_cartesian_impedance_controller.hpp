@@ -5,41 +5,20 @@
 
 #include <controller_interface/controller_interface.hpp>
 
+#include "conic_cbf.hpp"
 #include "controller_interface/controller_interface.hpp"
 #include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
+#include "planes_hocbf.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "visualization.hpp"
+namespace hocbf_cartesian_impedance_controller {
 
-namespace joint_impedance_controller {
-
-/**
- * @brief A ROS2-control controller for Effort force control
- *
- * This controller implements 6-dimensional end effector force control for
- * robots with a wrist force-torque sensor.  Users command
- * geometry_msgs::msg::WrenchStamped targets to steer the robot in task space.
- * The controller additionally listens to the specified force-torque sensor
- * signals and computes the superposition with the target wrench.
- *
- * The underlying solver maps this remaining wrench to joint motion.
- * Users can steer their robot with this control in free space. The speed of
- * the end effector motion is set with PD gains on each Effort axes.
- * In contact, the controller regulates the net force of the two wrenches to
- * zero.
- *
- * Note that during free motion, users can generally set higher control gains
- * for faster motion.  In contact with the environment, however, normally lower
- * gains are required to maintain stability.  The ranges to operate in mainly
- * depend on the stiffness of the environment and the controller cycle of the
- * real hardware, such that some experiments might be required for each use
- * case.
- *
- */
-class JointImpedanceController
+class HOCBFCartesianImpedanceController
     : public virtual effort_controller_base::EffortControllerBase {
  public:
-  JointImpedanceController();
+  HOCBFCartesianImpedanceController();
 
   virtual LifecycleNodeInterface::CallbackReturn on_init() override;
 
@@ -59,9 +38,7 @@ class JointImpedanceController
 
   using Base = effort_controller_base::EffortControllerBase;
 
-  ctrl::VectorND m_joint_stiffness;
-  ctrl::VectorND m_joint_damping;
-  ctrl::VectorND m_q_desired;
+  ctrl::Matrix6D m_cartesian_stiffness;
   double m_null_space_stiffness;
   double m_null_space_damping;
   ctrl::Vector6D m_target_wrench;
@@ -74,14 +51,19 @@ class JointImpedanceController
   void targetFrameCallback(
       const geometry_msgs::msg::PoseStamped::SharedPtr target);
   ctrl::Vector6D computeMotionError();
+  ctrl::Vector6D computePositionError();
+  ctrl::Vector6D computeOrientationError();
 
   rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
       m_target_wrench_subscriber;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
       m_target_frame_subscriber;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr
-      m_data_publisher;
-  KDL::Frame m_target_frame;
+      m_logger_publisher;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr
+      m_marker_pub;
+  std::shared_ptr<Visualizer> m_visualizer;
+  KDL::Frame m_target_frame, m_old_target_frame, m_initial_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
   KDL::Frame m_ft_sensor_transform;
@@ -91,22 +73,15 @@ class JointImpedanceController
 
   ctrl::MatrixND m_identity;
   ctrl::VectorND m_q_starting_pose;
-  ctrl::VectorND m_tau_old;
-
-  double m_vel_old = 0.0;
-  double m_last_time = 0.0;
-  double current_acc_j0 = 0.0;
 
   double const m_alpha = 0.3;
-  /**
-   * Allow users to choose whether to specify their target wrenches in the
-   * end-effector frame (= True) or the base frame (= False). The first one
-   * is easier for explicit task programming, while the second one is more
-   * intuitive for tele-manipulation.
-   */
-  bool m_hand_frame_control;
+  double m_k1 = 1.0;
+  double m_k2 = 1.0;
+  rclcpp::Time m_last_time;
+  int m_vis_iter = 0;
+  bool m_received_initial_frame = false;
 };
 
-}  // namespace joint_impedance_controller
+}  // namespace hocbf_cartesian_impedance_controller
 
 #endif

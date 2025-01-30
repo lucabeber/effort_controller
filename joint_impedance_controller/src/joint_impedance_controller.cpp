@@ -1,8 +1,4 @@
 #include <joint_impedance_controller/joint_impedance_controller.h>
-#include <joint_impedance_controller/pseudo_inversion.h>
-
-#include "controller_interface/controller_interface.hpp"
-#include "effort_controller_base/Utility.h"
 
 namespace joint_impedance_controller {
 
@@ -67,8 +63,13 @@ JointImpedanceController::on_configure(
 
   // Set damping
   m_joint_damping = ctrl::VectorND::Zero(Base::m_joint_number);
-  m_joint_damping = 2 * m_joint_stiffness.cwiseSqrt();
 
+  m_joint_damping = 2 * 0.70 * m_joint_stiffness.cwiseSqrt();
+
+  RCLCPP_INFO_STREAM(get_node()->get_logger(),
+                     "Joint stiffness: " << m_joint_stiffness.transpose());
+  RCLCPP_INFO_STREAM(get_node()->get_logger(),
+                     "Joint damping: " << m_joint_damping.transpose());
   // Set nullspace stiffness
   m_null_space_stiffness =
       get_node()->get_parameter("nullspace_stiffness").as_double();
@@ -103,6 +104,10 @@ JointImpedanceController::on_configure(
           std::bind(&JointImpedanceController::targetFrameCallback, this,
                     std::placeholders::_1));
 
+  m_data_publisher =
+      get_node()->create_publisher<std_msgs::msg::Float64MultiArray>(
+          get_node()->get_name() + std::string("/data"), 10);
+
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -127,15 +132,6 @@ JointImpedanceController::on_activate(
   m_q_desired = Base::m_joint_positions.data;
   m_q_starting_pose = Base::m_joint_positions.data;
 
-  // Initialize the old torque to zero
-  m_tau_old = ctrl::VectorND::Zero(Base::m_joint_number);
-
-  m_old_rot_error = ctrl::Vector3D::Zero();
-
-  m_old_vel_error = ctrl::VectorND::Zero(Base::m_joint_number);
-
-  m_target_wrench = ctrl::Vector6D::Zero();
-
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -153,8 +149,9 @@ JointImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type JointImpedanceController::update(
-    const rclcpp::Time &time, const rclcpp::Duration &period) {
+controller_interface::return_type
+JointImpedanceController::update(const rclcpp::Time &time,
+                                 const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -182,7 +179,7 @@ ctrl::Vector6D JointImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -208,8 +205,6 @@ ctrl::Vector6D JointImpedanceController::computeMotionError() {
 }
 
 ctrl::VectorND JointImpedanceController::computeTorque() {
-  // Find the desired joints positions
-  // Base::computeNullSpace(m_target_frame);
 
   // Compute the inverse kinematics
   Base::computeIKSolution(m_target_frame, m_q_desired);
@@ -229,14 +224,11 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
   // Redefine joints velocities in Eigen format
   ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
-
   ctrl::VectorND tau_task(Base::m_joint_number);
 
-  // Compute the desired joint torques
-  for (size_t i = 0; i < Base::m_joint_number; i++) {
-    tau_task(i) = m_joint_stiffness(i) * (m_q_desired(i) - q(i)) -
-                  m_joint_damping(i) * q_dot(i);
-  }
+  KDL::JntSpaceInertiaMatrix inertia_matrix(Base::m_joint_number);
+  m_dyn_solver->JntToMass(Base::m_joint_positions, inertia_matrix);
+
   ctrl::VectorND tau = tau_task;
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
@@ -251,6 +243,7 @@ ctrl::VectorND JointImpedanceController::computeTorque() {
                                       Base::m_joint_velocities, tau_coriolis);
     tau = tau + tau_coriolis.data;
   }
+
   return tau;
 }
 
@@ -290,7 +283,7 @@ void JointImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-}  // namespace joint_impedance_controller
+} // namespace joint_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

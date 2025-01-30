@@ -69,10 +69,10 @@ EffortControllerBase::on_init() {
                                            std::vector<std::string>());
     auto_declare<std::vector<std::string>>("command_interfaces",
                                            {hardware_interface::HW_IF_EFFORT});
-    auto_declare<std::vector<std::string>>(
-        "state_interfaces",
-        {hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY,
-         hardware_interface::HW_IF_EFFORT});
+    auto_declare<std::vector<std::string>>("state_interfaces",
+                                           {hardware_interface::HW_IF_POSITION,
+                                            hardware_interface::HW_IF_VELOCITY,
+                                            hardware_interface::HW_IF_EFFORT});
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
     m_initialized = true;
@@ -82,12 +82,9 @@ EffortControllerBase::on_init() {
     // append namespace to robot_description topic
     if (std::string(get_node()->get_namespace()).compare("/") == 0) {
       topic_name = "robot_description";
-      RCLCPP_INFO(get_node()->get_logger(), "A");
-
     } else {
       topic_name =
           std::string(get_node()->get_namespace()) + "/robot_description";
-      RCLCPP_INFO(get_node()->get_logger(), "B");
     }
     // create shared pointer to robot description
     auto robot_description_ptr = std::make_shared<std::string>();
@@ -106,6 +103,7 @@ EffortControllerBase::on_init() {
     }
     m_robot_description = *robot_description_ptr;
   }
+
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -126,8 +124,9 @@ EffortControllerBase::on_configure(
   RCLCPP_WARN_STREAM(get_node()->get_logger(), "Gravity compensation set to "
                                                    << std::boolalpha
                                                    << m_compensate_gravity);
-  RCLCPP_WARN_STREAM(get_node()->get_logger(),
-                     "Coriolis compensation set to " << m_compensate_coriolis);
+  RCLCPP_WARN_STREAM(get_node()->get_logger(), "Coriolis compensation set to "
+                                                   << std::boolalpha
+                                                   << m_compensate_coriolis);
   // // Get delta tau maximum
   m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
   if (m_delta_tau_max < 1.0) {
@@ -177,10 +176,9 @@ EffortControllerBase::on_configure(
   }
   if (!robot_tree.getChain(m_robot_base_link, m_end_effector_link,
                            m_robot_chain)) {
-    const std::string error =
-        ""
-        "Failed to parse robot chain from urdf model. "
-        "Do robot_base_link and end_effector_link exist?";
+    const std::string error = ""
+                              "Failed to parse robot chain from urdf model. "
+                              "Do robot_base_link and end_effector_link exist?";
     RCLCPP_ERROR(get_node()->get_logger(), error.c_str());
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::ERROR;
@@ -249,6 +247,7 @@ EffortControllerBase::on_configure(
       m_robot_chain, lower_pos_limits, upper_pos_limits, *m_fk_solver,
       *m_ik_solver_vel, 100, 1e-6));
   m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
+  m_jnt_to_jac_dot_solver.reset(new KDL::ChainJntToJacDotSolver(m_robot_chain));
   m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain, grav));
   RCLCPP_INFO(get_node()->get_logger(),
               "Finished initializing kinematics solvers");
@@ -304,7 +303,10 @@ EffortControllerBase::on_configure(
   // Initialize joint state
   m_joint_positions.resize(m_joint_number);
   m_joint_velocities.resize(m_joint_number);
+  m_old_joint_velocities.resize(m_joint_number);
+  m_old_joint_velocities.data.setZero();
   m_simulated_joint_motion.resize(m_joint_number);
+
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Base on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -396,7 +398,7 @@ EffortControllerBase::on_activate(
   // };
   // m_ik_solver->updateKinematics();
 
-  // Provide safe command buffers with starting where we are
+  // // Provide safe command buffers with starting where we are
   // computeJointEffortCmds(ctrl::VectorND::Zero(m_joint_number));
   // writeJointEffortCmds();
 
@@ -432,9 +434,9 @@ void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND &tau) {
     m_efforts[i] +=
         std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
     if (std::abs(difference) > m_delta_tau_max) {
-      RCLCPP_WARN(get_node()->get_logger(),
-                  "Joint %s effort rate saturated, was: %f",
-                  m_joint_names[i].c_str(), tau[i]);
+      // RCLCPP_WARN(get_node()->get_logger(),
+      //             "Joint %s effort rate saturated, was: %f",
+      //             m_joint_names[i].c_str(), tau[i]);
     }
   }
 }
@@ -454,8 +456,9 @@ void EffortControllerBase::computeIKSolution(
   simulated_joint_positions = m_simulated_joint_motion.data;
 }
 
-ctrl::Vector6D EffortControllerBase::displayInBaseLink(
-    const ctrl::Vector6D &vector, const std::string &from) {
+ctrl::Vector6D
+EffortControllerBase::displayInBaseLink(const ctrl::Vector6D &vector,
+                                        const std::string &from) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -478,8 +481,9 @@ ctrl::Vector6D EffortControllerBase::displayInBaseLink(
   return out;
 }
 
-ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
-    const ctrl::Matrix6D &tensor, const std::string &from) {
+ctrl::Matrix6D
+EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D &tensor,
+                                        const std::string &from) {
   // Get rotation to base
   KDL::Frame R_kdl;
   m_forward_kinematics_solver->JntToCart(m_joint_positions, R_kdl, from);
@@ -500,8 +504,9 @@ ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
   return tmp;
 }
 
-ctrl::Vector6D EffortControllerBase::displayInTipLink(
-    const ctrl::Vector6D &vector, const std::string &to) {
+ctrl::Vector6D
+EffortControllerBase::displayInTipLink(const ctrl::Vector6D &vector,
+                                       const std::string &to) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -529,16 +534,13 @@ void EffortControllerBase::updateJointStates() {
     const auto &velocity_interface = m_joint_state_vel_handles[i].get();
 
     m_joint_positions(i) = position_interface.get_value();
-    m_joint_velocities(i) = velocity_interface.get_value();
-
-    // std::transform(m_joint_positions.begin(), m_joint_positions.end(),
-    // m_joint_positions.begin(),
-    // [](double val) -> double {
-    //     return std::round(val * 10000) / 10000;
-    // });
-    // Rount to 4 decimal places
-    // m_joint_positions(i) = std::round(m_joint_positions(i) * 10000) / 10000;
+    m_joint_velocities(i) =
+        std::round((m_dotq_alpha * velocity_interface.get_value() +
+                    (1 - m_dotq_alpha) * m_old_joint_velocities(i)) *
+                   10000) /
+        10000;
+    m_old_joint_velocities(i) = m_joint_velocities(i);
   }
 }
 
-}  // namespace effort_controller_base
+} // namespace effort_controller_base

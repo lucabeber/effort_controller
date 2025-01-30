@@ -1,86 +1,82 @@
 cmake_minimum_required(VERSION 3.5)
-project(effort_controller_base)
+project(hocbf_cartesian_impedance_controller)
 
 set(CMAKE_CXX_STANDARD 17)
-
+# set(CMAKE_BUILD_TYPE Release)
 set(ADDITIONAL_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Wno-unused-parameter)
 add_compile_options(${ADDITIONAL_COMPILE_OPTIONS})
-
 # build in release
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 add_definitions(-DEIGEN_MPL2_ONLY)
-
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(controller_interface REQUIRED)
-find_package(kdl_parser REQUIRED)
-find_package(trajectory_msgs REQUIRED)
-find_package(pluginlib REQUIRED)
-find_package(urdf REQUIRED)
+find_package(effort_controller_base REQUIRED)
+find_package(visualization_msgs REQUIRED)
+set(QPOASES_INSTALL_DIR ${CMAKE_BINARY_DIR}/qpoases_install)
+include(ExternalProject)
+ExternalProject_Add(
+  external_qpoases
+  URL https://github.com/coin-or/qpOASES/archive/refs/tags/releases/3.2.1.tar.gz
+  CMAKE_ARGS
+  -DCMAKE_INSTALL_PREFIX=${QPOASES_INSTALL_DIR}
+  -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+  -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+  -DBUILD_SHARED_LIBS=OFF
+  -DQPOASES_BUILD_EXAMPLES=OFF
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+)
+add_library(qpoases_helper INTERFACE)
+add_dependencies(qpoases_helper external_qpoases)
+target_include_directories(qpoases_helper INTERFACE ${QPOASES_INSTALL_DIR}/include)
+target_link_libraries(qpoases_helper INTERFACE ${QPOASES_INSTALL_DIR}/lib/libqpOASES.a)
+add_library(qpoases::qpoases ALIAS qpoases_helper)
+
 
 # Convenience variable for dependencies
 set(THIS_PACKAGE_INCLUDE_DEPENDS
-        controller_interface
-        kdl_parser
-        trajectory_msgs
-        pluginlib
-        urdf
+        rclcpp
+        effort_controller_base
         Eigen3
+        visualization_msgs
 )
 
 ament_export_dependencies(
         ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
-
 #--------------------------------------------------------------------------------
 # Libraries
 #--------------------------------------------------------------------------------
 add_library(${PROJECT_NAME} SHARED
-  src/effort_controller_base.cpp
-  src/chainjnttojacdotsolver.cpp
+  src/hocbf_cartesian_impedance_controller.cpp
 )
 
-# Manual includes for local directories and non-ament packages
 target_include_directories(${PROJECT_NAME}
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+  PRIVATE
     ${EIGEN3_INCLUDE_DIR}
-    ${CMAKE_BINARY_DIR}  # ROS2VersionConfig.h
 )
+target_link_libraries(${PROJECT_NAME} qpoases::qpoases)
 
 ament_target_dependencies(${PROJECT_NAME}
         ${${PROJECT_NAME}_EXPORTED_TARGETS}
         ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
-
-
-
 # Prevent pluginlib from using boost
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
-
 
 #--------------------------------------------------------------------------------
 # Install and export
 #--------------------------------------------------------------------------------
 
-# pluginlib_export_plugin_description_file(effort_controller_base ik_solver_plugin.xml)
-
-# Note: The workflow as described here
-# https://docs.ros.org/en/foxy/How-To-Guides/Ament-CMake-Documentation.html#building-a-library
-# clashes with colcon's --symlink-install option.
-# See here: /opt/ros/foxy/share/ament_cmake_core/cmake/symlink_install/ament_cmake_symlink_install_targets.cmake
-# which lists `EXPORT` and `INCLUDES` (among other install keywords) to trigger a normal resource install.
-
-#ament_export_targets(my_targets_from_this_package HAS_LIBRARY_TARGET)
+pluginlib_export_plugin_description_file(controller_interface hocbf_cartesian_impedance_controller_plugin.xml)
 
 install(
   DIRECTORY include/
@@ -88,24 +84,19 @@ install(
 )
 
 install(
-  TARGETS ${PROJECT_NAME} 
-  #EXPORT my_targets_from_this_package
+  TARGETS ${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
-  #INCLUDES DESTINATION include
 )
 
-
-# Note: For the target based workflow, they seem to be superfluous.
-# But since that doesn't work yet, I'll add them just in case.
-# I took the joint_trajectory_controller as inspiration.
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 ament_export_include_directories(
   include
 )
 ament_export_libraries(
-  ${PROJECT_NAME} 
+  ${PROJECT_NAME}
 )
+
 
 ament_package()
