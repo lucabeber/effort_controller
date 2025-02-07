@@ -13,7 +13,9 @@ add_definitions(-DEIGEN_MPL2_ONLY)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(effort_controller_base REQUIRED)
+# log and debug
 find_package(debug_msg REQUIRED)
+find_package(matlogger2 REQUIRED)
 
 # Convenience variable for dependencies
 set(THIS_PACKAGE_INCLUDE_DEPENDS
@@ -49,7 +51,9 @@ ament_target_dependencies(${PROJECT_NAME}
 
 # Prevent pluginlib from using boost
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
-
+target_link_libraries(${PROJECT_NAME}
+  matlogger2::matlogger2
+)
 #--------------------------------------------------------------------------------
 # Install and export
 #--------------------------------------------------------------------------------

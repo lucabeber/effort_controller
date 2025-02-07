@@ -10,7 +10,10 @@
 #include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
+#include <matlogger2/matlogger2.h>
+
 #define DEBUG 0
+#define LOGGING 1
 
 namespace cartesian_impedance_controller {
 
@@ -64,6 +67,7 @@ class CartesianImpedanceController
   //   ctrl::Matrix6D m_cartesian_damping;
   double m_null_space_stiffness;
   double m_null_space_damping;
+  double m_max_impendance_force;
   ctrl::Vector6D m_target_wrench;
 
  private:
@@ -80,6 +84,7 @@ class CartesianImpedanceController
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
       m_target_frame_subscriber;
   rclcpp::Publisher<debug_msg::msg::Debug>::SharedPtr m_data_publisher;
+  XBot::MatLogger2::Ptr m_logger;
   KDL::Frame m_target_frame;
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
