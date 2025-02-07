@@ -6,47 +6,15 @@ namespace planes_hocbf {
 // control barrier function that ensures that the robot stays above a plane
 double h(const Eigen::Vector3d& x, const Eigen::Vector3d& n,
          const Eigen::Vector3d& p) {
-  return n.dot(x - p);
+  return n.transpose() * (x - p);
 }
 
 double dot_h(const Eigen::Vector3d& dot_x1, const Eigen::Vector3d& n) {
-  return n.dot(dot_x1);
+  return n.transpose() * dot_x1;
 }
 double ddot_h(const Eigen::Vector3d& dot_x2, const Eigen::Vector3d& n) {
-  return n.dot(dot_x2);
+  return n.transpose() * dot_x2;
 }
-// full hocbf debug function
-// double log_psi_2_quadratic(const Eigen::Vector3d& tau_nominal,
-//                            const Eigen::MatrixXd& Lambda,
-//                            const Eigen::MatrixXd& J, const Eigen::VectorXd&
-//                            mu, const Eigen::Vector3d& x_des, const
-//                            Eigen::Vector3d& x, const Eigen::Vector3d& dot_x1,
-//                            double dt, const Eigen::Vector3d& n, const
-//                            Eigen::Vector3d& p) {
-//   // void(mu);
-//   Eigen::MatrixXd J_tran_pinv;
-//   pseudoInverse(J.transpose(), &J_tran_pinv);
-//   // ignore coriolis and gravity, and setting Lambda_des = Lambda cancels out
-//   // F^{ext}
-//   Eigen::Vector3d dot_x2 =
-//       (-Lambda.inverse() * J_tran_pinv * tau_nominal).head(3);
-//   const double h_ = h(x, n, p);
-//   const double dot_h_ = dot_h(dot_x1, n);
-//   const double ddot_h_ = ddot_h(dot_x2, n);
-//   return ddot_h_ + 2 * dot_h_ * h_ + std::pow(dot_h_, 2) + std::pow(h_, 4) +
-//          2 * dot_h_ * pow(h_, 2);
-// }
-// psi_2 b vector
-// double quadratic_psi2_b(const Eigen::MatrixXd& Lambda,
-//                         const Eigen::VectorXd& mu, const Eigen::Vector3d& x,
-//                         const Eigen::Vector3d& dot_x, const Eigen::Vector3d&
-//                         n, const Eigen::Vector3d& p) {
-//   const double h_ = h(x, n, p);
-//   const double dot_h_ = dot_h(dot_x, n);
-//   return -2 * dot_h_ * h_ - std::pow(dot_h_, 2) - std::pow(h_, 4) -
-//          2 * dot_h_ * pow(h_, 2);
-// }
-
 double log_psi2_linear(const Eigen::VectorXd& F_u,
                        const Eigen::MatrixXd& Lambda, const Eigen::MatrixXd& J,
                        const Eigen::VectorXd& mu, const Eigen::Vector3d& x,
@@ -60,20 +28,12 @@ double log_psi2_linear(const Eigen::VectorXd& F_u,
   const double h_ = h(x, n, p);
   const double dot_h_ = dot_h(dot_x1, n);
   const double ddot_h_ = ddot_h(dot_x2, n);
-  // return ddot_h_ + k * dot_h_ + k * std::sqrt(dot_h_ + k * h_);
   return ddot_h_ + 2 * k1 * dot_h_ + k2 * k2 * h_;
 }
 
 // psi_2 A matrix
 Eigen::Vector3d psi2_A(const Eigen::MatrixXd& Lambda, const Eigen::Vector3d n) {
-  // Eigen::MatrixXd Lambda_inv = Lambda.inverse();
-  // return n.transpose() * Lambda_inv.block(0, 0, 3, 3);
-  Eigen::MatrixXd Lambda_pos = Lambda.block(0, 0, 3, 3);
-  // Eigen::MatrixXd Lambda_inv = Lambda_pos.inverse();
-  // std::cout << "Lambda_inv_block vs Lambda_block_inv\n"
-  //           << Lambda_inv.block(0, 0, 3, 3) << std::endl
-  //           << Lambda_pos.inverse() << std::endl;
-  return n.transpose() * Lambda_pos.inverse();
+  return n.transpose() * Lambda.inverse().block(0, 0, 3, 3);
 }
 double linear_psi2_b(const Eigen::MatrixXd& Lambda, const Eigen::VectorXd& mu,
                      const Eigen::Vector3d& x, const Eigen::Vector3d& dot_x,

@@ -156,9 +156,8 @@ HOCBFCartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type
-HOCBFCartesianImpedanceController::update(const rclcpp::Time &time,
-                                          const rclcpp::Duration &period) {
+controller_interface::return_type HOCBFCartesianImpedanceController::update(
+    const rclcpp::Time &time, const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -186,7 +185,7 @@ ctrl::Vector6D HOCBFCartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -222,7 +221,7 @@ ctrl::Vector6D HOCBFCartesianImpedanceController::computeOrientationError() {
   KDL::Frame error_kdl;
   error_kdl.M = m_target_frame.M * m_current_frame.M.Inverse();
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
   ctrl::Vector6D error;
   error.head<3>() << 0.0, 0.0, 0.0;
   error.tail<3>() << rot_axis(0), rot_axis(1), rot_axis(2);
@@ -230,6 +229,8 @@ ctrl::Vector6D HOCBFCartesianImpedanceController::computeOrientationError() {
 }
 
 ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
+  auto current_time = get_node()->get_clock()->now();
+
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
@@ -237,31 +238,54 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
   Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions,
                                       Base::m_jacobian);
 
-  // Compute the pseudo-inverse of the jacobian
   ctrl::MatrixND jac = Base::m_jacobian.data;
-  ctrl::MatrixND jac_tran_pseudo_inverse;
 
-  pseudoInverse(jac.transpose(), &jac_tran_pseudo_inverse);
+  KDL::JntSpaceInertiaMatrix M(Base::m_joint_number);
+  m_dyn_solver->JntToMass(Base::m_joint_positions, M);
+
+  Eigen::MatrixXd Lambda = (jac * M.data.inverse() * jac.transpose()).inverse();
 
   // Redefine joints velocities in Eigen format
   ctrl::VectorND q = Base::m_joint_positions.data;
   ctrl::VectorND q_dot = Base::m_joint_velocities.data;
-  ctrl::VectorND q_null_space = Base::m_simulated_joint_motion.data;
+  ctrl::VectorND q_null_space(Base::m_joint_number);
 
-  auto current_time = get_node()->get_clock()->now();
-  double dt = (current_time - m_last_time).seconds();
+  // Compute the motion error
+  ctrl::Vector6D motion_error = computeMotionError();
 
+  // Initialize the torque vectors
+  ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number),
+      tau_ext(Base::m_joint_number), tau_task_old(Base::m_joint_number),
+      tau(Base::m_joint_number);
+
+  // init tau to zero
+  tau.setZero();
+  tau_ext.setZero();
+  tau_task_old.setZero();
+  tau_task.setZero();
+  tau_null.setZero();
+
+  // compute ee velocity using jacobian
+  Eigen::VectorXd dot_x = (jac * q_dot).head(3);
+
+  // Compute the stiffness and damping in the base link
+  const auto base_link_stiffness =
+      Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
+
+  Eigen::MatrixXd K_d = base_link_stiffness;
+  Eigen::VectorXd damping_correction = 5.0 * Eigen::VectorXd::Ones(6);
+  auto D_d = compute_correct_damping(Lambda, K_d, 1.0);
+
+  // add a small damping correction to the diagonal of D_d to account for model
+  // inaccuracies, remove this loop if you face strange behavior
+  // for (int i = 5; i < 6; i++) {
+  //   D_d(i, i) = D_d(i, i) + damping_correction(3);
+  // }
+
+  // Compute the task torque
   std::vector<Eigen::Vector3d> n, p;
   n.push_back(Eigen::Vector3d::UnitZ());
   p.push_back(Eigen::Vector3d::UnitZ() * 0.4);
-
-  // Eigen::Vector3d plane(0.0, 1.0, 0.0);
-  // Eigen::Vector3d point(0.0, -0.2, 0.0);
-  // constraint_planes.push_back(std::make_pair(plane, point));
-  // plane << 0.0, -1.0, 0.0;
-  // point << 0.0, 0.2, 0.0;
-  // constraint_planes.push_back(std::make_pair(plane, point));
-
   if (m_vis_iter == 0) {
     Eigen::Vector3d target(m_target_frame.p.x(), m_target_frame.p.y(),
                            m_target_frame.p.z());
@@ -271,63 +295,11 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
                              0.015);
   }
   m_vis_iter = (m_vis_iter + 1) % 10;
-  // set limits (radiants) from initial orientation
-  // Eigen::Vector3d thetas(0.4, 0.4, 0.4);
-  // if (m_received_initial_frame) {
-  //   logs = conic_cbf::cbfOrientFilter(m_initial_frame, m_filtered_target,
-  //                                     m_target_frame, thetas, dt);
-  // }
 
-  // Compute the motion error
-  ctrl::Vector6D motion_error = computeMotionError();
-
-  // Initialize the torque vectors
-  ctrl::VectorND tau_task(Base::m_joint_number), tau_null(Base::m_joint_number),
-      tau_ext(Base::m_joint_number), tau(Base::m_joint_number);
-
-  // Compute the stiffness and damping in the base link
-  const auto base_link_stiffness =
-      Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
-
-  KDL::JntSpaceInertiaMatrix M(Base::m_joint_number);
-  m_dyn_solver->JntToMass(Base::m_joint_positions, M);
-
-  Eigen::MatrixXd Lambda = (jac * M.data.inverse() * jac.transpose()).inverse();
-
-  // retrieve dynamically adjusted damping using double diagonalization
-  const auto D_d = compute_correct_damping(Lambda, base_link_stiffness, 1.0);
-
-  // Compute the task torque
-  // ctrl::Vector6D F_task =
-  //     (base_link_stiffness * motion_error -
-  //      (2 * m_cartesian_stiffness.cwiseSqrt() * (jac * q_dot)));
-
-  Eigen::VectorXd F_u =
-      (base_link_stiffness * motion_error - D_d * (jac * q_dot));
-
-  // RCLCPP_INFO_STREAM_THROTTLE(
-  //     get_node()->get_logger(), *get_node()->get_clock(), 1000,
-  //     "motion_error xyz: " << motion_error.head<3>().norm()
-  //                          << " rpy: " << motion_error.tail<3>().norm());
-
-  // Compute the null space torque
-  // q_null_space = m_q_starting_pose;
-  // tau_null = (m_identity - jac.transpose() * jac_tran_pseudo_inverse) *
-  //            (m_null_space_stiffness * (-q + q_null_space) -
-  //             m_null_space_damping * q_dot);
-
-  // // Compute the torque to achieve the desired force
-  // tau_ext = jac.transpose() * m_target_wrench;
+  Eigen::VectorXd F_u = K_d * motion_error - (D_d * (jac * q_dot));
 
   KDL::JntArray tau_coriolis(Base::m_joint_number),
       tau_gravity(Base::m_joint_number);
-
-  // Initialize the torque vectors
-  tau_task.setZero();
-  tau_null.setZero();
-
-  // compute ee velocity using jacobian
-  Eigen::VectorXd dot_x = (jac * q_dot).head(3);
 
   if (m_compensate_gravity) {
     Base::m_dyn_solver->JntToGravity(Base::m_joint_positions, tau_gravity);
@@ -338,24 +310,46 @@ ctrl::VectorND HOCBFCartesianImpedanceController::computeTorque() {
                                       Base::m_joint_velocities, tau_coriolis);
     tau = tau + tau_coriolis.data;
   }
+  // Compute the null space torque
+  q_null_space = m_q_starting_pose;
+  if (m_null_space_stiffness > 1e-6) {
+    // Compute dynamically consistent null space projector
+    tau_null =
+        (m_identity - jac.transpose() * Lambda * jac * M.data.inverse()) *
+        (m_null_space_stiffness * (-q + q_null_space) -
+         m_null_space_damping * q_dot);
+  } else {
+    tau_null = ctrl::VectorND::Zero(Base::m_joint_number);
+  }
+
+  double dt = (current_time - m_last_time).seconds();
   std::vector<double> logs = planes_hocbf::hocbfPositionFilter(
       F_u, Lambda, jac, tau_coriolis.data, m_current_frame, dot_x, dt, n, p,
       m_k1, m_k2);
-  // logs.push_back(current_time.seconds());  // 4
-  if (logs[0] <= 0.0) {
-    RCLCPP_INFO_STREAM(get_node()->get_logger(), "PSI >= 0.0: " << logs[0]);
-  }
-  tau_task = jac.transpose() * F_u;
-  tau += tau_task;
-  logs.push_back(0.0);
-  logs.push_back(p[0][2]);
-  logs.push_back(m_current_frame.p.z());
-  logs.push_back(m_target_frame.p.z());
-  std_msgs::msg::Float64MultiArray msg;
-  msg.data = logs;
-  m_logger_publisher->publish(msg);
 
-  m_last_time = current_time;
+  tau_task = jac.transpose() * F_u;
+
+  // logs.push_back(current_time.seconds());  // 4
+
+  // Eigen::VectorXd stiffness_torque = jac.transpose() * (K_d *
+  // motion_error);
+  // Eigen::VectorXd damping_torque = jac.transpose() * -(D_d * (jac * q_dot));
+  // for (int i = 0; i < 7; i++) {
+  //   debug_msg.stiffness_torque[i] = stiffness_torque(i);
+  //   debug_msg.damping_torque[i] = damping_torque(i);
+  //   debug_msg.coriolis_torque[i] = tau_coriolis(i);
+  //   debug_msg.nullspace_torque[i] = tau_null(i);
+  //   if (i < 6) {
+  //     debug_msg.impedance_force[i] = Force(i);
+  //   }
+  // }
+
+  // Compute the torque to achieve the desired force
+  tau_ext = jac.transpose() * m_target_wrench;
+
+  tau += tau_task + tau_null + tau_ext;
+  // m_data_publisher->publish(debug_msg);
+
   return tau;
 }
 
@@ -399,7 +393,7 @@ void HOCBFCartesianImpedanceController::targetFrameCallback(
     m_received_initial_frame = true;
   }
 }
-} // namespace hocbf_cartesian_impedance_controller
+}  // namespace hocbf_cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>
