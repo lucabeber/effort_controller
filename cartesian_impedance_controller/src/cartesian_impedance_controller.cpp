@@ -133,7 +133,7 @@ CartesianImpedanceController::on_activate(
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_activate");
 
-  m_q_starting_pose = Base::m_joint_positions.data;
+  m_target_joint_position = m_q_starting_pose = Base::m_joint_positions.data;
 
   m_target_wrench = ctrl::Vector6D::Zero();
 
@@ -146,7 +146,7 @@ CartesianImpedanceController::on_deactivate(
     const rclcpp_lifecycle::State &previous_state) {
   // Stop drifting by sending zero joint velocities
   Base::computeJointEffortCmds(ctrl::Vector6D::Zero());
-  Base::writeJointEffortCmds();
+  // Base::writeJointEffortCmds(ctrl::VectorND::Zero());
   Base::on_deactivate(previous_state);
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_deactivate");
@@ -160,13 +160,14 @@ controller_interface::return_type CartesianImpedanceController::update(
   Base::updateJointStates();
 
   // Compute the torque to applay at the joints
-  ctrl::VectorND tau_tot = computeTorque();
+  // ctrl::VectorND tau_tot = computeTorque();
 
   // Saturation of the torque
-  Base::computeJointEffortCmds(tau_tot);
+  // Base::computeJointEffortCmds(tau_tot);
 
+  computeTargetPos();
   // Write final commands to the hardware interface
-  Base::writeJointEffortCmds();
+  Base::writeJointEffortCmds(m_target_joint_position);
 
   return controller_interface::return_type::OK;
 }
@@ -206,6 +207,15 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   error.tail<3>() << rot_axis(0), rot_axis(1), rot_axis(2);
 
   return error;
+}
+void CartesianImpedanceController::computeTargetPos() {
+  ctrl::VectorND desired_joint_position;
+  Base::computeIKSolution(m_target_frame, desired_joint_position);
+  // filter result with exp filter
+  double const alpha = 0.8;
+  ctrl::VectorND current_position = Base::m_joint_positions.data;
+  m_target_joint_position =
+      alpha * current_position + (1.0 - alpha) * desired_joint_position;
 }
 
 ctrl::VectorND CartesianImpedanceController::computeTorque() {
@@ -259,7 +269,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
 
   // add a small damping correction to the diagonal of D_d to account for model
   // inaccuracies, remove this loop if you face strange behavior
-  for (int i = 5; i < 6; i++) {
+  for (int i = 3; i < 6; i++) {
     D_d(i, i) = D_d(i, i) + damping_correction(3);
   }
   Eigen::VectorXd stiffness_torque = jac.transpose() * (K_d * motion_error);

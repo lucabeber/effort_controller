@@ -5,7 +5,6 @@
 #include <urdf/model.h>
 #include <urdf_model/joint.h>
 
-#include "chainjnttojacdotsolver.hpp"
 #include <cmath>
 #include <controller_interface/controller_interface.hpp>
 #include <functional>
@@ -32,6 +31,7 @@
 #include <trajectory_msgs/msg/joint_trajectory_point.hpp>
 #include <vector>
 
+#include "chainjnttojacdotsolver.hpp"
 #include "controller_interface/controller_interface.hpp"
 #include "controller_interface/helpers.hpp"
 #include "double_diagonalization.hpp"
@@ -45,12 +45,12 @@
 namespace effort_controller_base {
 
 class RobotDescriptionListener : public rclcpp::Node {
-public:
+ public:
   RobotDescriptionListener(std::shared_ptr<std::string> robot_description_ptr,
                            const std::string &topic_name);
   bool m_description_received_ = false;
 
-private:
+ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr m_description_sub_;
   std::shared_ptr<std::string> m_robot_description_ptr_;
 };
@@ -66,7 +66,7 @@ private:
  *
  */
 class EffortControllerBase : public controller_interface::ControllerInterface {
-public:
+ public:
   EffortControllerBase();
   virtual ~EffortControllerBase(){};
 
@@ -87,14 +87,14 @@ public:
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
 
-protected:
+ protected:
   /**
    * @brief Write joint control commands to the real hardware
    *
    * Depending on the hardware interface used, this is either joint positions
    * or velocities.
    */
-  void writeJointEffortCmds();
+  void writeJointEffortCmds(ctrl::VectorND &target_joint_positions);
 
   /**
    * @brief Compute one control step using forward dynamics simulation
@@ -174,7 +174,7 @@ protected:
                          ctrl::VectorND &simulated_joint_positions);
 
   KDL::Chain m_robot_chain;
-  KDL::Jacobian m_jacobian; // Jacobian
+  KDL::Jacobian m_jacobian;  // Jacobian
 
   std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
   std::shared_ptr<KDL::ChainJntToJacDotSolver> m_jnt_to_jac_dot_solver;
@@ -207,8 +207,7 @@ protected:
   KDL::JntArray m_old_joint_velocities;
   KDL::JntArray m_simulated_joint_motion;
 
-
-private:
+ private:
   std::vector<std::string> m_cmd_interface_types;
   std::vector<std::string> m_state_interface_types;
   std::vector<
@@ -238,6 +237,6 @@ private:
   bool m_kuka_hw;
 };
 
-} // namespace effort_controller_base
+}  // namespace effort_controller_base
 
 #endif

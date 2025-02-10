@@ -57,6 +57,7 @@ class CartesianImpedanceController
       const rclcpp::Time &time, const rclcpp::Duration &period) override;
 
   ctrl::VectorND computeTorque();
+  void computeTargetPos();
 
   using Base = effort_controller_base::EffortControllerBase;
 
@@ -84,6 +85,8 @@ class CartesianImpedanceController
   ctrl::Vector6D m_ft_sensor_wrench;
   std::string m_ft_sensor_ref_link;
   KDL::Frame m_ft_sensor_transform;
+
+  ctrl::VectorND m_target_joint_position;
 
   KDL::JntArray m_null_space;
   KDL::Frame m_current_frame;

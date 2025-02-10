@@ -67,12 +67,12 @@ EffortControllerBase::on_init() {
 
     auto_declare<std::vector<std::string>>("joints",
                                            std::vector<std::string>());
-    auto_declare<std::vector<std::string>>("command_interfaces",
-                                           {hardware_interface::HW_IF_EFFORT});
-    auto_declare<std::vector<std::string>>("state_interfaces",
-                                           {hardware_interface::HW_IF_POSITION,
-                                            hardware_interface::HW_IF_VELOCITY,
-                                            hardware_interface::HW_IF_EFFORT});
+    // auto_declare<std::vector<std::string>>("command_interfaces",
+    //                                        {hardware_interface::HW_IF_EFFORT});
+    auto_declare<std::vector<std::string>>(
+        "state_interfaces",
+        {hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY,
+         hardware_interface::HW_IF_EFFORT});
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
     m_initialized = true;
@@ -176,9 +176,10 @@ EffortControllerBase::on_configure(
   }
   if (!robot_tree.getChain(m_robot_base_link, m_end_effector_link,
                            m_robot_chain)) {
-    const std::string error = ""
-                              "Failed to parse robot chain from urdf model. "
-                              "Do robot_base_link and end_effector_link exist?";
+    const std::string error =
+        ""
+        "Failed to parse robot chain from urdf model. "
+        "Do robot_base_link and end_effector_link exist?";
     RCLCPP_ERROR(get_node()->get_logger(), error.c_str());
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::ERROR;
@@ -270,15 +271,15 @@ EffortControllerBase::on_configure(
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::ERROR;
   }
-  for (const auto &type : m_cmd_interface_types) {
-    if (type != hardware_interface::HW_IF_EFFORT) {
-      RCLCPP_ERROR(get_node()->get_logger(),
-                   "Unsupported command interface: %s. Choose effort",
-                   type.c_str());
-      return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-          CallbackReturn::ERROR;
-    }
-  }
+  // for (const auto &type : m_cmd_interface_types) {
+  //   if (type != hardware_interface::HW_IF_EFFORT) {
+  //     RCLCPP_ERROR(get_node()->get_logger(),
+  //                  "Unsupported command interface: %s. Choose effort",
+  //                  type.c_str());
+  //     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
+  //         CallbackReturn::ERROR;
+  //   }
+  // }
   m_state_interface_types =
       get_node()->get_parameter("state_interfaces").as_string_array();
   if (m_state_interface_types.empty()) {
@@ -298,7 +299,7 @@ EffortControllerBase::on_configure(
   m_configured = true;
 
   // Initialize effords to null
-  m_efforts = ctrl::VectorND::Zero(m_joint_number);
+  // m_efforts = ctrl::VectorND::Zero(m_joint_number);
 
   // Initialize joint state
   m_joint_positions.resize(m_joint_number);
@@ -306,7 +307,6 @@ EffortControllerBase::on_configure(
   m_old_joint_velocities.resize(m_joint_number);
   m_old_joint_velocities.data.setZero();
   m_simulated_joint_motion.resize(m_joint_number);
-
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Base on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -318,7 +318,7 @@ EffortControllerBase::on_deactivate(
     const rclcpp_lifecycle::State &previous_state) {
   if (m_active) {
     m_joint_cmd_eff_handles.clear();
-    // m_joint_cmd_pos_handles.clear();
+    m_joint_cmd_pos_handles.clear();
     // m_joint_cmd_vel_handles.clear();
     m_joint_state_pos_handles.clear();
     m_joint_state_vel_handles.clear();
@@ -352,15 +352,15 @@ EffortControllerBase::on_activate(
     }
   }
   // Effort
-  if (!controller_interface::get_ordered_interfaces(
-          command_interfaces_, m_joint_names, hardware_interface::HW_IF_EFFORT,
-          m_joint_cmd_eff_handles)) {
-    RCLCPP_ERROR(get_node()->get_logger(),
-                 "Expected %zu '%s' command interfaces, got %zu.",
-                 m_joint_number, hardware_interface::HW_IF_EFFORT,
-                 m_joint_cmd_eff_handles.size());
-    return CallbackReturn::ERROR;
-  }
+  // if (!controller_interface::get_ordered_interfaces(
+  //         command_interfaces_, m_joint_names,
+  //         hardware_interface::HW_IF_EFFORT, m_joint_cmd_eff_handles)) {
+  //   RCLCPP_ERROR(get_node()->get_logger(),
+  //                "Expected %zu '%s' command interfaces, got %zu.",
+  //                m_joint_number, hardware_interface::HW_IF_EFFORT,
+  //                m_joint_cmd_eff_handles.size());
+  //   return CallbackReturn::ERROR;
+  // }
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished getting command interfaces");
   // Get state handles.
@@ -408,37 +408,38 @@ EffortControllerBase::on_activate(
       CallbackReturn::SUCCESS;
 }
 
-void EffortControllerBase::writeJointEffortCmds() {
+void EffortControllerBase::writeJointEffortCmds(
+    ctrl::VectorND &target_joint_positions) {
   // Write all available types.
-  for (const auto &type : m_cmd_interface_types) {
-    if (type == hardware_interface::HW_IF_EFFORT) {
-      for (size_t i = 0; i < m_joint_number; ++i) {
-        // Effort saturation
-        m_efforts[i] = std::clamp(m_efforts[i], -m_joint_effort_limits(i),
-                                  m_joint_effort_limits(i));
-        m_joint_cmd_eff_handles[i].get().set_value(m_efforts[i]);
-      }
-    }
-  }
+  // for (const auto &type : m_cmd_interface_types) {
+  //   if (type == hardware_interface::HW_IF_EFFORT) {
+  //     for (size_t i = 0; i < m_joint_number; ++i) {
+  //       // Effort saturation
+  //       m_efforts[i] = std::clamp(m_efforts[i], -m_joint_effort_limits(i),
+  //                                 m_joint_effort_limits(i));
+  //       m_joint_cmd_eff_handles[i].get().set_value(m_efforts[i]);
+  //     }
+  //   }
+  // }
   if (m_kuka_hw == true) {
     for (size_t i = 0; i < m_joint_number; ++i) {
-      m_joint_cmd_pos_handles[i].get().set_value(m_joint_positions(i));
+      m_joint_cmd_pos_handles[i].get().set_value(target_joint_positions(i));
     }
   }
 }
 
 void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND &tau) {
   // Saturation of torque rate
-  for (size_t i = 0; i < m_joint_number; i++) {
-    const double difference = tau[i] - m_efforts[i];
-    m_efforts[i] +=
-        std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
-    if (std::abs(difference) > m_delta_tau_max) {
-      // RCLCPP_WARN(get_node()->get_logger(),
-      //             "Joint %s effort rate saturated, was: %f",
-      //             m_joint_names[i].c_str(), tau[i]);
-    }
-  }
+  // for (size_t i = 0; i < m_joint_number; i++) {
+  //   const double difference = tau[i] - m_efforts[i];
+  //   m_efforts[i] +=
+  //       std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
+  //   if (std::abs(difference) > m_delta_tau_max) {
+  //     // RCLCPP_WARN(get_node()->get_logger(),
+  //     //             "Joint %s effort rate saturated, was: %f",
+  //     //             m_joint_names[i].c_str(), tau[i]);
+  //   }
+  // }
 }
 
 void EffortControllerBase::computeIKSolution(
@@ -456,9 +457,8 @@ void EffortControllerBase::computeIKSolution(
   simulated_joint_positions = m_simulated_joint_motion.data;
 }
 
-ctrl::Vector6D
-EffortControllerBase::displayInBaseLink(const ctrl::Vector6D &vector,
-                                        const std::string &from) {
+ctrl::Vector6D EffortControllerBase::displayInBaseLink(
+    const ctrl::Vector6D &vector, const std::string &from) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -481,9 +481,8 @@ EffortControllerBase::displayInBaseLink(const ctrl::Vector6D &vector,
   return out;
 }
 
-ctrl::Matrix6D
-EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D &tensor,
-                                        const std::string &from) {
+ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
+    const ctrl::Matrix6D &tensor, const std::string &from) {
   // Get rotation to base
   KDL::Frame R_kdl;
   m_forward_kinematics_solver->JntToCart(m_joint_positions, R_kdl, from);
@@ -504,9 +503,8 @@ EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D &tensor,
   return tmp;
 }
 
-ctrl::Vector6D
-EffortControllerBase::displayInTipLink(const ctrl::Vector6D &vector,
-                                       const std::string &to) {
+ctrl::Vector6D EffortControllerBase::displayInTipLink(
+    const ctrl::Vector6D &vector, const std::string &to) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -543,4 +541,4 @@ void EffortControllerBase::updateJointStates() {
   }
 }
 
-} // namespace effort_controller_base
+}  // namespace effort_controller_base
