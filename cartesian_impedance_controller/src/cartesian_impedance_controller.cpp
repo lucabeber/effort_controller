@@ -26,6 +26,7 @@ CartesianImpedanceController::on_init() {
   auto_declare<double>("stiffness.rot_x", default_rot_stiff);
   auto_declare<double>("stiffness.rot_y", default_rot_stiff);
   auto_declare<double>("stiffness.rot_z", default_rot_stiff);
+  auto_declare<double>("max_impedance_force", 70.0); //TODO
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -72,8 +73,8 @@ CartesianImpedanceController::on_configure(
   tmp[4] = 2 * sqrt(tmp[4]);
   tmp[5] = 2 * sqrt(tmp[5]);
 
-  // m_cartesian_damping = tmp.asDiagonal();
-
+  m_max_impendance_force =
+      get_node()->get_parameter("max_impedance_force").as_double(); //TODO
   // Set nullspace stiffness
   m_null_space_stiffness =
       get_node()->get_parameter("nullspace_stiffness").as_double();
@@ -136,7 +137,10 @@ CartesianImpedanceController::on_activate(
   m_q_starting_pose = Base::m_joint_positions.data;
 
   m_target_wrench = ctrl::Vector6D::Zero();
-
+#if LOGGING
+  m_logger = XBot::MatLogger2::MakeLogger("/tmp/cart_impedance_log");
+  m_logger->set_buffer_mode(XBot::VariableBuffer::Mode::circular_buffer);
+#endif
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -154,8 +158,9 @@ CartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CartesianImpedanceController::update(
-    const rclcpp::Time &time, const rclcpp::Duration &period) {
+controller_interface::return_type
+CartesianImpedanceController::update(const rclcpp::Time &time,
+                                     const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -183,7 +188,7 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -209,6 +214,11 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
 }
 
 ctrl::VectorND CartesianImpedanceController::computeTorque() {
+  // Redefine joints velocities in Eigen format
+  ctrl::VectorND q = Base::m_joint_positions.data;
+  ctrl::VectorND q_dot = Base::m_joint_velocities.data;
+  ctrl::VectorND q_null_space(Base::m_joint_number);
+
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
@@ -226,13 +236,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
 
   KDL::JntSpaceInertiaMatrix M(Base::m_joint_number);
   m_dyn_solver->JntToMass(Base::m_joint_positions, M);
-
   Eigen::MatrixXd Lambda = (jac * M.data.inverse() * jac.transpose()).inverse();
-
-  // Redefine joints velocities in Eigen format
-  ctrl::VectorND q = Base::m_joint_positions.data;
-  ctrl::VectorND q_dot = Base::m_joint_velocities.data;
-  ctrl::VectorND q_null_space(Base::m_joint_number);
 
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
@@ -254,12 +258,12 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
       Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
 
   Eigen::MatrixXd K_d = base_link_stiffness;
-  Eigen::VectorXd damping_correction = 5.0 * Eigen::VectorXd::Ones(6);
+  Eigen::VectorXd damping_correction = 3.0 * Eigen::VectorXd::Ones(6);
   auto D_d = compute_correct_damping(Lambda, K_d, 1.0);
 
   // add a small damping correction to the diagonal of D_d to account for model
   // inaccuracies, remove this loop if you face strange behavior
-  for (int i = 5; i < 6; i++) {
+  for (int i = 3; i < 6; i++) {
     D_d(i, i) = D_d(i, i) + damping_correction(3);
   }
   Eigen::VectorXd stiffness_torque = jac.transpose() * (K_d * motion_error);
@@ -321,6 +325,26 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   }
   m_data_publisher->publish(debug_msg);
 #endif
+#if LOGGING
+  Eigen::VectorXd Force = K_d * motion_error - D_d * (jac * q_dot);
+  // lambda that computes condition number
+  auto compute_condition_number = [](const Eigen::MatrixXd &matrix) {
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
+    Eigen::VectorXd singular_values = svd.singularValues();
+    return singular_values(0) / singular_values(singular_values.size() - 1);
+  };
+  m_logger->add("condition_number mass", compute_condition_number(M.data));
+  m_logger->add("condition_number jac", compute_condition_number(jac));
+  for (int i = 0; i < 7; i++) {
+    m_logger->add("stiffness_" + std::to_string(i), stiffness_torque(i));
+    m_logger->add("damping_" + std::to_string(i), damping_torque(i));
+    m_logger->add("coriolis_" + std::to_string(i), tau_coriolis(i));
+    m_logger->add("nullspace_" + std::to_string(i), tau_null(i));
+    if (i < 6) {
+      m_logger->add("impedance_force_" + std::to_string(i), Force(i));
+    }
+  }
+#endif
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
@@ -365,7 +389,7 @@ void CartesianImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-}  // namespace cartesian_impedance_controller
+} // namespace cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

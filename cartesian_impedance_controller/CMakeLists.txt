@@ -3,17 +3,38 @@ project(cartesian_impedance_controller)
 
 set(CMAKE_CXX_STANDARD 17)
 set(ADDITIONAL_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Wno-unused-parameter)
+
+# Optional parameter to enable logging, only if MatLogger2 is found
+# Refer to https://github.com/ADVRHumanoids/MatLogger2 to install MatLogger2
+# output file is /tmp/cart_impedance_log<timestamp>.mat
+option(LOGGING "Enable logging" ON)
 add_compile_options(${ADDITIONAL_COMPILE_OPTIONS})
-# build in release
+
+# Build in release mode if not specified
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
+
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 add_definitions(-DEIGEN_MPL2_ONLY)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(effort_controller_base REQUIRED)
 find_package(debug_msg REQUIRED)
+
+# Try to find MatLogger2 if logging is enabled
+if (LOGGING)
+  find_package(matlogger2 QUIET)
+  if (matlogger2_FOUND)
+    message(STATUS "MatLogger2 found: Logging enabled")
+    set(LOGGING_ENABLED TRUE)
+  else()
+    message(WARNING "MatLogger2 not found: Logging disabled")
+    set(LOGGING_ENABLED FALSE)
+  endif()
+else()
+  set(LOGGING_ENABLED FALSE)
+endif()
 
 # Convenience variable for dependencies
 set(THIS_PACKAGE_INCLUDE_DEPENDS
@@ -22,6 +43,11 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
         Eigen3
         debug_msg
 )
+
+if (LOGGING_ENABLED)
+  list(APPEND THIS_PACKAGE_INCLUDE_DEPENDS matlogger2)
+  add_compile_definitions(LOGGING)
+endif()
 
 ament_export_dependencies(
         ${THIS_PACKAGE_INCLUDE_DEPENDS}
@@ -50,18 +76,15 @@ ament_target_dependencies(${PROJECT_NAME}
 # Prevent pluginlib from using boost
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PLUGINLIB__DISABLE_BOOST_FUNCTIONS")
 
+if (LOGGING_ENABLED)
+  target_link_libraries(${PROJECT_NAME} matlogger2::matlogger2)
+endif()
+
 #--------------------------------------------------------------------------------
 # Install and export
 #--------------------------------------------------------------------------------
 
 pluginlib_export_plugin_description_file(controller_interface cartesian_impedance_controller_plugin.xml)
-
-# Note: The workflow as described here https://docs.ros.org/en/foxy/How-To-Guides/Ament-CMake-Documentation.html#building-a-library
-# does not work for me.
-# I'm not sure what's the problem right now, but I need to out-comment the
-# lines below to achieve a correct symlink-install.
-
-#ament_export_targets(my_targets_from_this_package HAS_LIBRARY_TARGET)
 
 install(
   DIRECTORY include/
@@ -70,22 +93,13 @@ install(
 
 install(
   TARGETS ${PROJECT_NAME}
-  #EXPORT my_targets_from_this_package
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
-  #INCLUDES DESTINATION include
 )
 
-# Note: For the target based workflow, they seem to be superfluous.
-# But since that doesn't work yet, I'll add them just in case.
-# I took the joint_trajectory_controller as inspiration.
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
-ament_export_include_directories(
-  include
-)
-ament_export_libraries(
-  ${PROJECT_NAME}
-)
+ament_export_include_directories(include)
+ament_export_libraries(${PROJECT_NAME})
 
 ament_package()

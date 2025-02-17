@@ -21,6 +21,8 @@ cartesian_impedance_controller:
     robot_base_link: "base_link"
     ft_sensor_ref_link: "sensor_link"
     compliance_ref_link: "compliance_link"
+    max_impedance_force: 10.0 # (N) maximum task force
+    delta_tau_max: 1.0 # (Nm) maximum torque increment in one control cycle
     joints:
       - joint1
       - joint2
