@@ -137,9 +137,10 @@ CartesianImpedanceController::on_activate(
   m_q_starting_pose = Base::m_joint_positions.data;
 
   m_target_wrench = ctrl::Vector6D::Zero();
-
-  m_logger = XBot::MatLogger2::MakeLogger("/tmp/my_log");
+#if LOGGING
+  m_logger = XBot::MatLogger2::MakeLogger("/tmp/cart_impedance_log");
   m_logger->set_buffer_mode(XBot::VariableBuffer::Mode::circular_buffer);
+#endif
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
@@ -237,46 +238,6 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   m_dyn_solver->JntToMass(Base::m_joint_positions, M);
   Eigen::MatrixXd Lambda = (jac * M.data.inverse() * jac.transpose()).inverse();
 
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "M: " << M.data);
-
-  // lambda that computes condition number
-  auto compute_condition_number = [](const Eigen::MatrixXd &matrix) {
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
-    Eigen::VectorXd singular_values = svd.singularValues();
-    return singular_values(0) / singular_values(singular_values.size() - 1);
-  };
-  // RCLCPP_INFO_STREAM(
-  //     get_node()->get_logger(),
-  //     "Condition number of Jacobian: " << compute_condition_number(jac));
-  // RCLCPP_INFO_STREAM(
-  //     get_node()->get_logger(),
-  //     "Condition number of M: " << compute_condition_number(M.data));
-  // RCLCPP_INFO_STREAM(
-  //     get_node()->get_logger(),
-  //     "Condition number of Lambda: " << compute_condition_number(Lambda));
-
-  // // compue eigenvalues of M
-  // Eigen::EigenSolver<Eigen::MatrixXd> es(M.data);
-  // Eigen::VectorXd eigenvalues = es.eigenvalues().real();
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(),
-  //                    "Eigenvalues of M: " << eigenvalues.transpose());
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(),
-  //                    "Condition number of M: " << eigenvalues.maxCoeff() /
-  //                                                     eigenvalues.minCoeff());
-  // Eigen::EigenSolver<Eigen::MatrixXd> es3(jac);
-  // RCLCPP_INFO_STREAM(
-  //     get_node()->get_logger(),
-  //     "Eigenvalues of Lambda: " << es3.eigenvalues().real().transpose());
-  // RCLCPP_INFO_STREAM(
-  //     get_node()->get_logger(),
-  //     "Condition number of Lambda: " << es3.eigenvalues().real().maxCoeff() /
-  //                                           es3.eigenvalues().real().minCoeff());
-  // Eigen::JacobiSVD<Eigen::MatrixXd> svd(jac);
-  // RCLCPP_INFO_STREAM(
-  //     get_node()->get_logger(),
-  //     "Eigenvalues of Jacobian: " << svd.singularValues().transpose());
-  // RCLCPP_INFO_STREAM(get_node()->get_logger(), "----");
-
   // Compute the motion error
   ctrl::Vector6D motion_error = computeMotionError();
 
@@ -366,7 +327,14 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
 #endif
 #if LOGGING
   Eigen::VectorXd Force = K_d * motion_error - D_d * (jac * q_dot);
-
+  // lambda that computes condition number
+  auto compute_condition_number = [](const Eigen::MatrixXd &matrix) {
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
+    Eigen::VectorXd singular_values = svd.singularValues();
+    return singular_values(0) / singular_values(singular_values.size() - 1);
+  };
+  m_logger->add("condition_number mass", compute_condition_number(M.data));
+  m_logger->add("condition_number jac", compute_condition_number(jac));
   for (int i = 0; i < 7; i++) {
     m_logger->add("stiffness_" + std::to_string(i), stiffness_torque(i));
     m_logger->add("damping_" + std::to_string(i), damping_torque(i));
