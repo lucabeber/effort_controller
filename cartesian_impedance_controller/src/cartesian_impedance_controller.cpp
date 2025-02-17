@@ -26,7 +26,7 @@ CartesianImpedanceController::on_init() {
   auto_declare<double>("stiffness.rot_x", default_rot_stiff);
   auto_declare<double>("stiffness.rot_y", default_rot_stiff);
   auto_declare<double>("stiffness.rot_z", default_rot_stiff);
-  auto_declare<double>("max_impedance_force", 70.0);
+  auto_declare<double>("max_impedance_force", 70.0); //TODO
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -74,7 +74,7 @@ CartesianImpedanceController::on_configure(
   tmp[5] = 2 * sqrt(tmp[5]);
 
   m_max_impendance_force =
-      get_node()->get_parameter("max_impedance_force").as_double();
+      get_node()->get_parameter("max_impedance_force").as_double(); //TODO
   // Set nullspace stiffness
   m_null_space_stiffness =
       get_node()->get_parameter("nullspace_stiffness").as_double();
