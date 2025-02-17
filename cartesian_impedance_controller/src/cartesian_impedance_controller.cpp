@@ -302,7 +302,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
 
   // add a small damping correction to the diagonal of D_d to account for model
   // inaccuracies, remove this loop if you face strange behavior
-  for (int i = 5; i < 6; i++) {
+  for (int i = 3; i < 6; i++) {
     D_d(i, i) = D_d(i, i) + damping_correction(3);
   }
   Eigen::VectorXd stiffness_torque = jac.transpose() * (K_d * motion_error);

@@ -10,10 +10,15 @@
 #include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
+<<<<<<< Updated upstream
 #include <matlogger2/matlogger2.h>
 
 #define DEBUG 0
 #define LOGGING 1
+=======
+
+#define DEBUG 1
+>>>>>>> Stashed changes
 
 namespace cartesian_impedance_controller {
 
