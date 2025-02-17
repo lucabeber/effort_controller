@@ -15,7 +15,6 @@
   <depend>effort_controller_base</depend>
   <depend>controller_interface</depend>
   <depend>debug_msg</depend>
-  <depend>matlogger2</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
