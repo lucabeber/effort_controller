@@ -15,9 +15,10 @@
 #include <kdl/chaindynparam.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainfksolvervel_recursive.hpp>
-#include <kdl/chainiksolverpos_nr_jl.hpp>
 #include <kdl/chainiksolverpos_lma.hpp>
+#include <kdl/chainiksolverpos_nr_jl.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
+#include <kdl/chainiksolvervel_pinv_nso.hpp>
 #include <kdl/frames.hpp>
 #include <kdl/jacobian.hpp>
 #include <kdl/jntarray.hpp>
@@ -46,12 +47,12 @@
 namespace effort_controller_base {
 
 class RobotDescriptionListener : public rclcpp::Node {
- public:
+public:
   RobotDescriptionListener(std::shared_ptr<std::string> robot_description_ptr,
                            const std::string &topic_name);
   bool m_description_received_ = false;
 
- private:
+private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr m_description_sub_;
   std::shared_ptr<std::string> m_robot_description_ptr_;
 };
@@ -67,7 +68,7 @@ class RobotDescriptionListener : public rclcpp::Node {
  *
  */
 class EffortControllerBase : public controller_interface::ControllerInterface {
- public:
+public:
   EffortControllerBase();
   virtual ~EffortControllerBase(){};
 
@@ -88,7 +89,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
 
- protected:
+protected:
   /**
    * @brief Write joint control commands to the real hardware
    *
@@ -175,13 +176,16 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
                          ctrl::VectorND &simulated_joint_positions);
 
   KDL::Chain m_robot_chain;
-  KDL::Jacobian m_jacobian;  // Jacobian
+  KDL::Jacobian m_jacobian; // Jacobian
 
   std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
   std::shared_ptr<KDL::ChainJntToJacDotSolver> m_jnt_to_jac_dot_solver;
   std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
   std::shared_ptr<KDL::ChainFkSolverPos_recursive> m_fk_solver;
-  std::shared_ptr<KDL::ChainIkSolverPos_LMA> m_ik_solver;
+  std::shared_ptr<KDL::ChainIkSolverPos_NR_JL> m_ik_solver;
+
+  std::shared_ptr<KDL::ChainIkSolverVel_pinv_nso> m_ik_solver_vel_nso;
+
   std::shared_ptr<KDL::ChainIkSolverVel_pinv> m_ik_solver_vel;
   std::shared_ptr<KDL::ChainDynParam> m_dyn_solver;
 
@@ -208,7 +212,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   KDL::JntArray m_old_joint_velocities;
   KDL::JntArray m_simulated_joint_motion;
 
- private:
+private:
   std::vector<std::string> m_cmd_interface_types;
   std::vector<std::string> m_state_interface_types;
   std::vector<
@@ -238,6 +242,6 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   bool m_kuka_hw;
 };
 
-}  // namespace effort_controller_base
+} // namespace effort_controller_base
 
 #endif

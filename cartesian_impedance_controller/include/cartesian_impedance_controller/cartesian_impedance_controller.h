@@ -110,6 +110,8 @@ private:
   double current_acc_j0 = 0.0;
   bool m_compensate_dJdq = false;
 
+  double m_last_time;
+
   /**
    * Allow users to choose whether to specify their target wrenches in the
    * end-effector frame (= True) or the base frame (= False). The first one
@@ -117,6 +119,19 @@ private:
    * intuitive for tele-manipulation.
    */
   bool m_hand_frame_control;
+
+  double theta_from_matrix(Eigen::Matrix3d &R) {
+    return std::acos((R.trace() - 1) / 2);
+  }
+  // logaritmic map from rotation matrix
+  Eigen::Vector3d log_map(Eigen::Matrix3d &R) {
+    double theta = theta_from_matrix(R);
+    if (theta == 0) {
+      return Eigen::Vector3d::Zero();
+    }
+    Eigen::Matrix3d log_R = theta / (2 * std::sin(theta)) * (R - R.transpose());
+    return Eigen::Vector3d(log_R(2, 1), log_R(0, 2), log_R(1, 0));
+  }
 };
 
 } // namespace cartesian_impedance_controller

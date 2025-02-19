@@ -97,7 +97,6 @@ CartesianImpedanceController::on_configure(
           std::bind(&CartesianImpedanceController::targetWrenchCallback, this,
                     std::placeholders::_1));
 
-
   // m_ft_sensor_wrench_subscriber =
   //   get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
   //     get_node()->get_name() + std::string("/ft_sensor_wrench"),
@@ -118,10 +117,11 @@ CartesianImpedanceController::on_configure(
   m_logger = XBot::MatLogger2::MakeLogger("/tmp/cart_impedance_log500");
   m_logger->set_buffer_mode(XBot::VariableBuffer::Mode::circular_buffer);
   // subscribe to lbr_fri_idl/msg/LBRState
-  m_state_subscriber = get_node()->create_subscription<lbr_fri_idl::msg::LBRState>(
-      "/lbr/state", 1,
-      std::bind(&CartesianImpedanceController::stateCallback, this,
-                std::placeholders::_1));
+  m_state_subscriber =
+      get_node()->create_subscription<lbr_fri_idl::msg::LBRState>(
+          "/lbr/state", 1,
+          std::bind(&CartesianImpedanceController::stateCallback, this,
+                    std::placeholders::_1));
 #endif
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
@@ -129,7 +129,8 @@ CartesianImpedanceController::on_configure(
       CallbackReturn::SUCCESS;
 }
 #if LOGGING
-void CartesianImpedanceController::stateCallback(const lbr_fri_idl::msg::LBRState::SharedPtr state){
+void CartesianImpedanceController::stateCallback(
+    const lbr_fri_idl::msg::LBRState::SharedPtr state) {
   m_state = *state;
   // m_logger->add("commanded_torque:", state->commanded_torque.data);
   // m_logger->
@@ -155,6 +156,8 @@ CartesianImpedanceController::on_activate(
   m_target_joint_position = m_q_starting_pose = Base::m_joint_positions.data;
 
   m_target_wrench = ctrl::Vector6D::Zero();
+
+  m_last_time = get_node()->get_clock()->now().seconds();
 
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
@@ -229,37 +232,133 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   return error;
 }
 void CartesianImpedanceController::computeTargetPos() {
-  ctrl::VectorND desired_joint_position;
-  Base::computeIKSolution(m_target_frame, desired_joint_position);
-  // filter result with exp filter
-  // double const alpha = 0.8;
-  // ctrl::VectorND current_position = Base::m_joint_positions.data;
-  m_target_joint_position = desired_joint_position;
+  // Compute the forward kinematics
+  Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
+
+  double deltaT = get_node()->get_clock()->now().seconds() - m_last_time;
+  m_last_time = get_node()->get_clock()->now().seconds();
+
+  // Eigen::Matrix<double, 3, 3> M_error(
+  //     (m_target_frame.M * m_current_frame.M.Inverse()).data);
+
+  // compute logaritmic map of the rotation error
+  // Eigen::Vector3d angular_vel = log_map(M_error);
+  // cart_twist.rot =
+  //     KDL::Vector(3 * angular_vel(0), 3 * angular_vel(1), 3 *
+  //     angular_vel(2));
+
+  Eigen::Matrix<double, 3, 3> target_M(m_target_frame.M.data);
+
+  KDL::JntArray q_des(Base::m_joint_number);
+  q_des.data = Base::m_joint_positions.data;
+
+  KDL::Frame current_simulated_frame = m_current_frame;
+  Eigen::Vector3d n_d = target_M.col(0);
+  Eigen::Vector3d s_d = target_M.col(1);
+  Eigen::Vector3d a_d = target_M.col(2);
+
+  Eigen::Vector3d angular_err;
+  Eigen::Vector3d linear_err;
+  Eigen::VectorXd error(6);
+  error.setOnes();
+  KDL::JntArray q_dot_des(Base::m_joint_number);
+  q_dot_des.data.setZero();
+
+  double x_error_norm = 100.0;
+  int num_steps = 0;
+  const double K_p = 1.0;
+  const double K_o = 100.0;
+  const double eps_condition = 0.001;
+  while (num_steps < 15 && x_error_norm > eps_condition) {
+    num_steps++;
+
+    // Compute linear velocity
+    Eigen::Vector3d linear_err(m_target_frame.p.x() - current_simulated_frame.p.x(),
+                               m_target_frame.p.y() - current_simulated_frame.p.y(),
+                               m_target_frame.p.z() - current_simulated_frame.p.z());
+    Eigen::Vector3d linear_vel = linear_err / deltaT;
+
+    // Compute rotation error
+    Eigen::Matrix<double, 3, 3> current_M(current_simulated_frame.M.data);
+    Eigen::Vector3d n_e = current_M.col(0);
+    Eigen::Vector3d s_e = current_M.col(1);
+    Eigen::Vector3d a_e = current_M.col(2);
+    Eigen::Vector3d angular_err =
+        -0.5 * (n_e.cross(n_d) + s_e.cross(s_d) + a_e.cross(a_d));
+
+    // Define twist
+    KDL::Twist v_d;
+    v_d.vel = K_p * KDL::Vector(linear_vel(0), linear_vel(1), linear_vel(2));
+    v_d.rot = K_o * KDL::Vector(angular_err(0), angular_err(1), angular_err(2));
+
+    // Solve for joint velocities
+    if (Base::m_ik_solver_vel_nso->CartToJnt(q_des, v_d, q_dot_des) < 0) {
+      RCLCPP_ERROR(get_node()->get_logger(), "Could not find IK nso solution");
+      return;
+    }
+
+    // Integrate q_des
+    for (int i = 0; i < Base::m_joint_number; i++) {
+      q_des(i) += q_dot_des(i) * deltaT;
+    }
+
+    // Forward kinematics update
+    Base::m_fk_solver->JntToCart(q_des, current_simulated_frame);
+
+    // Update error AFTER applying q_des
+    linear_err << m_target_frame.p.x() - current_simulated_frame.p.x(),
+        m_target_frame.p.y() - current_simulated_frame.p.y(),
+        m_target_frame.p.z() - current_simulated_frame.p.z();
+    current_M = Eigen::Matrix<double, 3, 3>(current_simulated_frame.M.data);
+    n_e = current_M.col(0);
+    s_e = current_M.col(1);
+    a_e = current_M.col(2);
+    angular_err = -0.5 * (n_e.cross(n_d) + s_e.cross(s_d) + a_e.cross(a_d));
+
+    // Compute norm of error
+    error.head(3) = linear_err;
+    error.tail(3) = angular_err;
+    x_error_norm = error.norm();
+  }
+
+  // RCLCPP_INFO(get_node()->get_logger(), "angular_err: %f %f %f ~ Steps: %d",
+  //             angular_err(0), angular_err(1), angular_err(2), num_steps);
+  if (num_steps != 1 && num_steps != 500) {
+    RCLCPP_WARN(get_node()->get_logger(), "STEPS: %d", num_steps);
+    return;
+  } else {
+    RCLCPP_INFO(get_node()->get_logger(), "STEPS: %d", num_steps);
+  }
+  // RCLCPP_WARN(get_node()->get_logger(), "STEPS: %d", num_steps);
+
+  m_target_joint_position = q_des.data;
   // alpha * current_position + (1.0 - alpha) * desired_joint_position;
 
-  #if LOGGING
+#if LOGGING
   m_logger->add("time_sec", m_state.time_stamp_sec);
   m_logger->add("time_nsec", m_state.time_stamp_nano_sec);
   // add cartesian traj
   m_logger->add("cart_target_x", m_target_frame.p.x());
   m_logger->add("cart_target_y", m_target_frame.p.y());
   m_logger->add("cart_target_z", m_target_frame.p.z());
-  Eigen::Matrix<double,3,3> M_d(m_target_frame.M.data);
-  m_logger->add("cart_target_M", M_d);
+  Eigen::Matrix<double, 3, 3> rot_des(m_target_frame.M.data);
+  m_logger->add("cart_target_M", rot_des);
   m_logger->add("cart_current_x", m_current_frame.p.x());
   m_logger->add("cart_current_y", m_current_frame.p.y());
   m_logger->add("cart_current_z", m_current_frame.p.z());
-  Eigen::Matrix<double,3,3> M_c(m_current_frame.M.data);
+  Eigen::Matrix<double, 3, 3> M_c(m_current_frame.M.data);
   m_logger->add("cart_current_M", M_c);
   // solver outcome
   m_logger->add("joint_current", Base::m_joint_positions.data);
   m_logger->add("joint_target", m_target_joint_position);
 
-  std::vector<double> measured_torque(std::begin(m_state.measured_torque), std::end(m_state.measured_torque));
+  std::vector<double> measured_torque(std::begin(m_state.measured_torque),
+                                      std::end(m_state.measured_torque));
   m_logger->add("measured_torque", measured_torque);
-  std::vector<double> commanded_torque(std::begin(m_state.commanded_torque), std::end(m_state.commanded_torque));
+  std::vector<double> commanded_torque(std::begin(m_state.commanded_torque),
+                                       std::end(m_state.commanded_torque));
   m_logger->add("commanded_torque", commanded_torque);
-  
+
   // Compute the jacobian
   Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions,
                                       Base::m_jacobian);

@@ -242,12 +242,35 @@ EffortControllerBase::on_configure(
   tmp.addChain(m_robot_chain, "not_relevant");
   m_forward_kinematics_solver.reset(new KDL::TreeFkSolverPos_recursive(tmp));
   m_fk_solver.reset(new KDL::ChainFkSolverPos_recursive(m_robot_chain));
-  m_ik_solver_vel.reset(new KDL::ChainIkSolverVel_pinv(m_robot_chain));
-  // m_ik_solver.reset(new KDL::ChainIkSolverPos_NR_JL(
-  //     m_robot_chain, lower_pos_limits, upper_pos_limits, *m_fk_solver,
-  //     *m_ik_solver_vel, 100, 1e-6));
-  m_ik_solver.reset(new KDL::ChainIkSolverPos_LMA(m_robot_chain));
 
+  m_ik_solver_vel.reset(new KDL::ChainIkSolverVel_pinv(m_robot_chain));
+
+  m_ik_solver.reset(new KDL::ChainIkSolverPos_NR_JL(
+      m_robot_chain, lower_pos_limits, upper_pos_limits, *m_fk_solver,
+      *m_ik_solver_vel, 100, 1e-6));
+
+  // m_ik_solver.reset(new KDL::ChainIkSolverPos_LMA(m_robot_chain, 1e-4, 1000,
+  // 1e-6));
+
+  KDL::JntArray q_ns(m_joint_number), weights(m_joint_number);
+  q_ns(0) = 0.0;
+  q_ns(1) = 0.78;
+  q_ns(2) = 0.0;
+  q_ns(3) = -1.57;
+  q_ns(4) = 0.0;
+  q_ns(5) = -0.78;
+  q_ns(6) = 0.0;
+  
+  weights(0) = 1.0;
+  weights(1) = 1.0;
+  weights(2) = 1.0;
+  weights(3) = 1.0;
+  weights(4) = 1.0;
+  weights(5) = 1.0;
+  weights(6) = 1.0;
+
+  m_ik_solver_vel_nso.reset(
+      new KDL::ChainIkSolverVel_pinv_nso(m_robot_chain, q_ns, weights));
 
   RCLCPP_INFO(get_node()->get_logger(), "Using IK LMA solver");
 
