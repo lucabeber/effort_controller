@@ -97,6 +97,7 @@ CartesianImpedanceController::on_configure(
           std::bind(&CartesianImpedanceController::targetWrenchCallback, this,
                     std::placeholders::_1));
 
+
   // m_ft_sensor_wrench_subscriber =
   //   get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
   //     get_node()->get_name() + std::string("/ft_sensor_wrench"),
@@ -109,13 +110,31 @@ CartesianImpedanceController::on_configure(
           get_node()->get_name() + std::string("/target_frame"), 3,
           std::bind(&CartesianImpedanceController::targetFrameCallback, this,
                     std::placeholders::_1));
+
   m_data_publisher = get_node()->create_publisher<debug_msg::msg::Debug>(
       get_node()->get_name() + std::string("/data"), 1);
+
+#if LOGGING
+  m_logger = XBot::MatLogger2::MakeLogger("/tmp/cart_impedance_log500");
+  m_logger->set_buffer_mode(XBot::VariableBuffer::Mode::circular_buffer);
+  // subscribe to lbr_fri_idl/msg/LBRState
+  m_state_subscriber = get_node()->create_subscription<lbr_fri_idl::msg::LBRState>(
+      "/lbr/state", 1,
+      std::bind(&CartesianImpedanceController::stateCallback, this,
+                std::placeholders::_1));
+#endif
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished Impedance on_configure");
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
       CallbackReturn::SUCCESS;
 }
+#if LOGGING
+void CartesianImpedanceController::stateCallback(const lbr_fri_idl::msg::LBRState::SharedPtr state){
+  m_state = *state;
+  // m_logger->add("commanded_torque:", state->commanded_torque.data);
+  // m_logger->
+}
+#endif
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 CartesianImpedanceController::on_activate(
@@ -154,8 +173,9 @@ CartesianImpedanceController::on_deactivate(
       CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CartesianImpedanceController::update(
-    const rclcpp::Time &time, const rclcpp::Duration &period) {
+controller_interface::return_type
+CartesianImpedanceController::update(const rclcpp::Time &time,
+                                     const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
 
@@ -184,7 +204,7 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   // Use Rodrigues Vector for a compact representation of orientation errors
   // Only for angles within [0,Pi)
   KDL::Vector rot_axis = KDL::Vector::Zero();
-  double angle = error_kdl.M.GetRotAngle(rot_axis);  // rot_axis is normalized
+  double angle = error_kdl.M.GetRotAngle(rot_axis); // rot_axis is normalized
   double distance = error_kdl.p.Normalize();
 
   // Clamp maximal tolerated error.
@@ -212,10 +232,47 @@ void CartesianImpedanceController::computeTargetPos() {
   ctrl::VectorND desired_joint_position;
   Base::computeIKSolution(m_target_frame, desired_joint_position);
   // filter result with exp filter
-  double const alpha = 0.8;
-  ctrl::VectorND current_position = Base::m_joint_positions.data;
-  m_target_joint_position =
-      alpha * current_position + (1.0 - alpha) * desired_joint_position;
+  // double const alpha = 0.8;
+  // ctrl::VectorND current_position = Base::m_joint_positions.data;
+  m_target_joint_position = desired_joint_position;
+  // alpha * current_position + (1.0 - alpha) * desired_joint_position;
+
+  #if LOGGING
+  m_logger->add("time_sec", m_state.time_stamp_sec);
+  m_logger->add("time_nsec", m_state.time_stamp_nano_sec);
+  // add cartesian traj
+  m_logger->add("cart_target_x", m_target_frame.p.x());
+  m_logger->add("cart_target_y", m_target_frame.p.y());
+  m_logger->add("cart_target_z", m_target_frame.p.z());
+  Eigen::Matrix<double,3,3> M_d(m_target_frame.M.data);
+  m_logger->add("cart_target_M", M_d);
+  m_logger->add("cart_current_x", m_current_frame.p.x());
+  m_logger->add("cart_current_y", m_current_frame.p.y());
+  m_logger->add("cart_current_z", m_current_frame.p.z());
+  Eigen::Matrix<double,3,3> M_c(m_current_frame.M.data);
+  m_logger->add("cart_current_M", M_c);
+  // solver outcome
+  m_logger->add("joint_current", Base::m_joint_positions.data);
+  m_logger->add("joint_target", m_target_joint_position);
+
+  std::vector<double> measured_torque(std::begin(m_state.measured_torque), std::end(m_state.measured_torque));
+  m_logger->add("measured_torque", measured_torque);
+  std::vector<double> commanded_torque(std::begin(m_state.commanded_torque), std::end(m_state.commanded_torque));
+  m_logger->add("commanded_torque", commanded_torque);
+  
+  // Compute the jacobian
+  Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions,
+                                      Base::m_jacobian);
+  ctrl::MatrixND jac = Base::m_jacobian.data;
+
+  auto compute_condition_number = [](const Eigen::MatrixXd &matrix) {
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
+    Eigen::VectorXd singular_values = svd.singularValues();
+    return singular_values(0) / singular_values(singular_values.size() - 1);
+  };
+  m_logger->add("condition_number_jac", compute_condition_number(jac));
+
+#endif
 }
 
 ctrl::VectorND CartesianImpedanceController::computeTorque() {
@@ -331,6 +388,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   }
   m_data_publisher->publish(debug_msg);
 #endif
+
   // Compute the torque to achieve the desired force
   tau_ext = jac.transpose() * m_target_wrench;
 
@@ -375,7 +433,7 @@ void CartesianImpedanceController::targetFrameCallback(
                  KDL::Vector(target->pose.position.x, target->pose.position.y,
                              target->pose.position.z));
 }
-}  // namespace cartesian_impedance_controller
+} // namespace cartesian_impedance_controller
 
 // Pluginlib
 #include <pluginlib/class_list_macros.hpp>

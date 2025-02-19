@@ -69,10 +69,10 @@ EffortControllerBase::on_init() {
                                            std::vector<std::string>());
     // auto_declare<std::vector<std::string>>("command_interfaces",
     //                                        {hardware_interface::HW_IF_EFFORT});
-    auto_declare<std::vector<std::string>>(
-        "state_interfaces",
-        {hardware_interface::HW_IF_POSITION, hardware_interface::HW_IF_VELOCITY,
-         hardware_interface::HW_IF_EFFORT});
+    auto_declare<std::vector<std::string>>("state_interfaces",
+                                           {hardware_interface::HW_IF_POSITION,
+                                            hardware_interface::HW_IF_VELOCITY,
+                                            hardware_interface::HW_IF_EFFORT});
     auto_declare<double>("solver.error_scale", 1.0);
     auto_declare<int>("solver.iterations", 1);
     m_initialized = true;
@@ -176,10 +176,9 @@ EffortControllerBase::on_configure(
   }
   if (!robot_tree.getChain(m_robot_base_link, m_end_effector_link,
                            m_robot_chain)) {
-    const std::string error =
-        ""
-        "Failed to parse robot chain from urdf model. "
-        "Do robot_base_link and end_effector_link exist?";
+    const std::string error = ""
+                              "Failed to parse robot chain from urdf model. "
+                              "Do robot_base_link and end_effector_link exist?";
     RCLCPP_ERROR(get_node()->get_logger(), error.c_str());
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::ERROR;
@@ -244,9 +243,14 @@ EffortControllerBase::on_configure(
   m_forward_kinematics_solver.reset(new KDL::TreeFkSolverPos_recursive(tmp));
   m_fk_solver.reset(new KDL::ChainFkSolverPos_recursive(m_robot_chain));
   m_ik_solver_vel.reset(new KDL::ChainIkSolverVel_pinv(m_robot_chain));
-  m_ik_solver.reset(new KDL::ChainIkSolverPos_NR_JL(
-      m_robot_chain, lower_pos_limits, upper_pos_limits, *m_fk_solver,
-      *m_ik_solver_vel, 100, 1e-6));
+  // m_ik_solver.reset(new KDL::ChainIkSolverPos_NR_JL(
+  //     m_robot_chain, lower_pos_limits, upper_pos_limits, *m_fk_solver,
+  //     *m_ik_solver_vel, 100, 1e-6));
+  m_ik_solver.reset(new KDL::ChainIkSolverPos_LMA(m_robot_chain));
+
+
+  RCLCPP_INFO(get_node()->get_logger(), "Using IK LMA solver");
+
   m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
   m_jnt_to_jac_dot_solver.reset(new KDL::ChainJntToJacDotSolver(m_robot_chain));
   m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain, grav));
@@ -457,8 +461,9 @@ void EffortControllerBase::computeIKSolution(
   simulated_joint_positions = m_simulated_joint_motion.data;
 }
 
-ctrl::Vector6D EffortControllerBase::displayInBaseLink(
-    const ctrl::Vector6D &vector, const std::string &from) {
+ctrl::Vector6D
+EffortControllerBase::displayInBaseLink(const ctrl::Vector6D &vector,
+                                        const std::string &from) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -481,8 +486,9 @@ ctrl::Vector6D EffortControllerBase::displayInBaseLink(
   return out;
 }
 
-ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
-    const ctrl::Matrix6D &tensor, const std::string &from) {
+ctrl::Matrix6D
+EffortControllerBase::displayInBaseLink(const ctrl::Matrix6D &tensor,
+                                        const std::string &from) {
   // Get rotation to base
   KDL::Frame R_kdl;
   m_forward_kinematics_solver->JntToCart(m_joint_positions, R_kdl, from);
@@ -503,8 +509,9 @@ ctrl::Matrix6D EffortControllerBase::displayInBaseLink(
   return tmp;
 }
 
-ctrl::Vector6D EffortControllerBase::displayInTipLink(
-    const ctrl::Vector6D &vector, const std::string &to) {
+ctrl::Vector6D
+EffortControllerBase::displayInTipLink(const ctrl::Vector6D &vector,
+                                       const std::string &to) {
   // Adjust format
   KDL::Wrench wrench_kdl;
   for (int i = 0; i < 6; ++i) {
@@ -541,4 +548,4 @@ void EffortControllerBase::updateJointStates() {
   }
 }
 
-}  // namespace effort_controller_base
+} // namespace effort_controller_base

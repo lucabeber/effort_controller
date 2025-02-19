@@ -10,6 +10,10 @@
 #include "effort_controller_base/Utility.h"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
+#if LOGGING
+#include <lbr_fri_idl/msg/lbr_state.hpp>
+#include <matlogger2/matlogger2.h>
+#endif
 #define DEBUG 0
 
 namespace cartesian_impedance_controller {
@@ -39,7 +43,7 @@ namespace cartesian_impedance_controller {
  */
 class CartesianImpedanceController
     : public virtual effort_controller_base::EffortControllerBase {
- public:
+public:
   CartesianImpedanceController();
 
   virtual LifecycleNodeInterface::CallbackReturn on_init() override;
@@ -53,8 +57,8 @@ class CartesianImpedanceController
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
 
-  controller_interface::return_type update(
-      const rclcpp::Time &time, const rclcpp::Duration &period) override;
+  controller_interface::return_type
+  update(const rclcpp::Time &time, const rclcpp::Duration &period) override;
 
   ctrl::VectorND computeTorque();
   void computeTargetPos();
@@ -67,15 +71,19 @@ class CartesianImpedanceController
   double m_null_space_damping;
   ctrl::Vector6D m_target_wrench;
 
- private:
+private:
   ctrl::Vector6D compensateGravity();
 
   void targetWrenchCallback(
       const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
-  void targetFrameCallback(
-      const geometry_msgs::msg::PoseStamped::SharedPtr target);
+  void
+  targetFrameCallback(const geometry_msgs::msg::PoseStamped::SharedPtr target);
   ctrl::Vector6D computeMotionError();
 
+#if LOGGING
+  void stateCallback(const lbr_fri_idl::msg::LBRState::SharedPtr state);
+  lbr_fri_idl::msg::LBRState m_state;
+#endif
   rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
       m_target_wrench_subscriber;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
@@ -87,7 +95,11 @@ class CartesianImpedanceController
   KDL::Frame m_ft_sensor_transform;
 
   ctrl::VectorND m_target_joint_position;
-
+#if LOGGING
+  XBot::MatLogger2::Ptr m_logger;
+  rclcpp::Subscription<lbr_fri_idl::msg::LBRState>::SharedPtr
+      m_state_subscriber;
+#endif
   KDL::JntArray m_null_space;
   KDL::Frame m_current_frame;
 
@@ -97,6 +109,7 @@ class CartesianImpedanceController
   double m_vel_old = 0.0;
   double current_acc_j0 = 0.0;
   bool m_compensate_dJdq = false;
+
   /**
    * Allow users to choose whether to specify their target wrenches in the
    * end-effector frame (= True) or the base frame (= False). The first one
@@ -106,6 +119,6 @@ class CartesianImpedanceController
   bool m_hand_frame_control;
 };
 
-}  // namespace cartesian_impedance_controller
+} // namespace cartesian_impedance_controller
 
 #endif

@@ -16,6 +16,7 @@
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainfksolvervel_recursive.hpp>
 #include <kdl/chainiksolverpos_nr_jl.hpp>
+#include <kdl/chainiksolverpos_lma.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 #include <kdl/frames.hpp>
 #include <kdl/jacobian.hpp>
@@ -180,7 +181,7 @@ class EffortControllerBase : public controller_interface::ControllerInterface {
   std::shared_ptr<KDL::ChainJntToJacDotSolver> m_jnt_to_jac_dot_solver;
   std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
   std::shared_ptr<KDL::ChainFkSolverPos_recursive> m_fk_solver;
-  std::shared_ptr<KDL::ChainIkSolverPos_NR_JL> m_ik_solver;
+  std::shared_ptr<KDL::ChainIkSolverPos_LMA> m_ik_solver;
   std::shared_ptr<KDL::ChainIkSolverVel_pinv> m_ik_solver_vel;
   std::shared_ptr<KDL::ChainDynParam> m_dyn_solver;
 
