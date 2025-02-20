@@ -114,8 +114,12 @@ CartesianImpedanceController::on_configure(
       get_node()->get_name() + std::string("/data"), 1);
 
 #if LOGGING
-  m_logger = XBot::MatLogger2::MakeLogger("/tmp/cart_impedance_log500");
+  XBot::MatLogger2::Options opt;
+  opt.default_buffer_size = 1e5; // set default buffer size
+  opt.enable_compression = true;
+  m_logger = XBot::MatLogger2::MakeLogger("/tmp/cart_impedance.mat", opt);
   m_logger->set_buffer_mode(XBot::VariableBuffer::Mode::circular_buffer);
+
   // subscribe to lbr_fri_idl/msg/LBRState
   m_state_subscriber =
       get_node()->create_subscription<lbr_fri_idl::msg::LBRState>(
@@ -166,6 +170,10 @@ CartesianImpedanceController::on_activate(
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 CartesianImpedanceController::on_deactivate(
     const rclcpp_lifecycle::State &previous_state) {
+  // call logger destructor
+#if LOGGING
+  m_logger.reset();
+#endif
   // Stop drifting by sending zero joint velocities
   Base::computeJointEffortCmds(ctrl::Vector6D::Zero());
   // Base::writeJointEffortCmds(ctrl::VectorND::Zero());
@@ -232,6 +240,11 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   return error;
 }
 void CartesianImpedanceController::computeTargetPos() {
+
+  // Compute the jacobian
+  Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions,
+                                      Base::m_jacobian);
+  ctrl::MatrixND jac = Base::m_jacobian.data;
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
@@ -256,82 +269,103 @@ void CartesianImpedanceController::computeTargetPos() {
   Eigen::Vector3d n_d = target_M.col(0);
   Eigen::Vector3d s_d = target_M.col(1);
   Eigen::Vector3d a_d = target_M.col(2);
+  Eigen::Vector3d n_e, s_e, a_e;
 
-  Eigen::Vector3d angular_err;
-  Eigen::Vector3d linear_err;
-  Eigen::VectorXd error(6);
-  error.setOnes();
+  Eigen::Vector3d e_o;
+  Eigen::Vector3d e_p;
+  Eigen::Vector3d error_pos, error_rot, old_error_pos, old_error_rot;
+  old_error_pos.setZero();
+  old_error_rot.setZero();
   KDL::JntArray q_dot_des(Base::m_joint_number);
   q_dot_des.data.setZero();
 
-  double x_error_norm = 100.0;
   int num_steps = 0;
-  const double K_p = 1.0;
-  const double K_o = 100.0;
-  const double eps_condition = 0.001;
-  while (num_steps < 15 && x_error_norm > eps_condition) {
-    num_steps++;
+  const double init_K_p = 5.0;
+  const double init_K_o = 20.0;
+  double K_p = init_K_p;
+  double K_o = init_K_o;
+  const double eps_condition_pos = 0.0001;
+  const double eps_condition_rot = 0.0005;
+  const double eps_condition_grad_pos = 1e-5;
+  const double eps_condition_grad_rot = 2e-5;
+  const int max_steps = 1000;
+  // lambda for skew
+  auto S = [](const Eigen::Vector3d &v) {
+    Eigen::Matrix3d S;
+    S << 0, -v(2), v(1), v(2), 0, -v(0), -v(1), v(0), 0;
+    return S;
+  };
+  // while (num_steps < 15 && x_error_norm > eps_condition) {
+  for (int num_steps = 0; num_steps < max_steps; num_steps++) {
+    // Forward kinematics update
+    Base::m_fk_solver->JntToCart(q_des, current_simulated_frame);
 
-    // Compute linear velocity
-    Eigen::Vector3d linear_err(m_target_frame.p.x() - current_simulated_frame.p.x(),
-                               m_target_frame.p.y() - current_simulated_frame.p.y(),
-                               m_target_frame.p.z() - current_simulated_frame.p.z());
-    Eigen::Vector3d linear_vel = linear_err / deltaT;
-
-    // Compute rotation error
-    Eigen::Matrix<double, 3, 3> current_M(current_simulated_frame.M.data);
-    Eigen::Vector3d n_e = current_M.col(0);
-    Eigen::Vector3d s_e = current_M.col(1);
-    Eigen::Vector3d a_e = current_M.col(2);
-    Eigen::Vector3d angular_err =
-        -0.5 * (n_e.cross(n_d) + s_e.cross(s_d) + a_e.cross(a_d));
-
+    // Update error AFTER applying q_des
+    e_p << m_target_frame.p.x() - current_simulated_frame.p.x(),
+        m_target_frame.p.y() - current_simulated_frame.p.y(),
+        m_target_frame.p.z() - current_simulated_frame.p.z();
+    auto current_M =
+        Eigen::Matrix<double, 3, 3>(current_simulated_frame.M.data);
+    n_e = current_M.col(0);
+    s_e = current_M.col(1);
+    a_e = current_M.col(2);
+    e_o = -0.5 * (n_e.cross(n_d) + s_e.cross(s_d) + a_e.cross(a_d));
+    Eigen::MatrixXd L =
+        -0.5 * (S(n_d) * S(n_e) + S(s_d) * S(s_e) + S(a_d) * S(a_e));
+    // Compute norm of error
+    error_pos = e_p;
+    error_rot = e_o;
+    auto L_damped = L + 0.01 * Eigen::Matrix3d::Identity();
+    Eigen::Vector3d ang_vel = L_damped.inverse() * K_o * e_o;
+    // if (error_pos.norm() < eps_condition_pos &&
+    //     error_rot.norm() < eps_condition_rot) {
+    if ((((error_pos - old_error_pos).norm() < eps_condition_grad_pos &&
+          (error_rot - old_error_rot).norm() < eps_condition_grad_rot)) ||
+        ((error_pos.norm() < eps_condition_pos &&
+          error_rot.norm() < eps_condition_rot))) {
+      RCLCPP_WARN(get_node()->get_logger(),
+                  "Met ending condition after %d steps", num_steps);
+      break;
+    } else {
+      RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(),
+                           300, "%d | Error pos: %f %f %f, Error rot: %f %f %f",
+                           num_steps, error_pos(0), error_pos(1), error_pos(2),
+                           error_rot(0), error_rot(1), error_rot(2));
+    }
+    old_error_pos = error_pos;
+    old_error_rot = error_rot;
     // Define twist
     KDL::Twist v_d;
-    v_d.vel = K_p * KDL::Vector(linear_vel(0), linear_vel(1), linear_vel(2));
-    v_d.rot = K_o * KDL::Vector(angular_err(0), angular_err(1), angular_err(2));
+    v_d.vel = K_p * KDL::Vector(e_p(0), e_p(1), e_p(2));
+    v_d.rot = KDL::Vector(ang_vel(0), ang_vel(1), ang_vel(2));
 
     // Solve for joint velocities
     if (Base::m_ik_solver_vel_nso->CartToJnt(q_des, v_d, q_dot_des) < 0) {
       RCLCPP_ERROR(get_node()->get_logger(), "Could not find IK nso solution");
       return;
     }
-
-    // Integrate q_des
+    // RCLCPP_INFO("q_des before: %f %f %f %f %f %f %f", q_des(0), q_des(1),
+    // q_des(2), q_des(3), q_des(4), q_des(5), q_des(6)); Integrate q_des
     for (int i = 0; i < Base::m_joint_number; i++) {
       q_des(i) += q_dot_des(i) * deltaT;
     }
-
-    // Forward kinematics update
-    Base::m_fk_solver->JntToCart(q_des, current_simulated_frame);
-
-    // Update error AFTER applying q_des
-    linear_err << m_target_frame.p.x() - current_simulated_frame.p.x(),
-        m_target_frame.p.y() - current_simulated_frame.p.y(),
-        m_target_frame.p.z() - current_simulated_frame.p.z();
-    current_M = Eigen::Matrix<double, 3, 3>(current_simulated_frame.M.data);
-    n_e = current_M.col(0);
-    s_e = current_M.col(1);
-    a_e = current_M.col(2);
-    angular_err = -0.5 * (n_e.cross(n_d) + s_e.cross(s_d) + a_e.cross(a_d));
-
-    // Compute norm of error
-    error.head(3) = linear_err;
-    error.tail(3) = angular_err;
-    x_error_norm = error.norm();
+    // RCLCPP_INFO("q_des after: %f %f %f %f %f %f %f", q_des(0), q_des(1),
+    // q_des(2), q_des(3), q_des(4), q_des(5), q_des(6));
+    K_p = std::max(0.1 * init_K_p, init_K_p * std::exp(-0.01 * num_steps));
+    K_o = std::max(0.1 * init_K_o, init_K_o * std::exp(-0.01 * num_steps));
   }
 
   // RCLCPP_INFO(get_node()->get_logger(), "angular_err: %f %f %f ~ Steps: %d",
   //             angular_err(0), angular_err(1), angular_err(2), num_steps);
-  if (num_steps != 1 && num_steps != 500) {
-    RCLCPP_WARN(get_node()->get_logger(), "STEPS: %d", num_steps);
-    return;
-  } else {
-    RCLCPP_INFO(get_node()->get_logger(), "STEPS: %d", num_steps);
-  }
+  // if (num_steps != 1 && num_steps != 500) {
+  //   RCLCPP_WARN(get_node()->get_logger(), "STEPS: %d", num_steps);
+  //   return;
+  // } else {
+  //   RCLCPP_INFO(get_node()->get_logger(), "STEPS: %d", num_steps);
+  // }
   // RCLCPP_WARN(get_node()->get_logger(), "STEPS: %d", num_steps);
 
-  m_target_joint_position = q_des.data;
+  m_target_joint_position = 0.9 * Base::m_joint_positions.data + 0.1 * q_des.data;
   // alpha * current_position + (1.0 - alpha) * desired_joint_position;
 
 #if LOGGING
@@ -358,11 +392,6 @@ void CartesianImpedanceController::computeTargetPos() {
   std::vector<double> commanded_torque(std::begin(m_state.commanded_torque),
                                        std::end(m_state.commanded_torque));
   m_logger->add("commanded_torque", commanded_torque);
-
-  // Compute the jacobian
-  Base::m_jnt_to_jac_solver->JntToJac(Base::m_joint_positions,
-                                      Base::m_jacobian);
-  ctrl::MatrixND jac = Base::m_jacobian.data;
 
   auto compute_condition_number = [](const Eigen::MatrixXd &matrix) {
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
