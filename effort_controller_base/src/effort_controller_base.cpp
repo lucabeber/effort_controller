@@ -32,8 +32,10 @@ EffortControllerBase::command_interface_configuration() const {
   conf.type = controller_interface::interface_configuration_type::INDIVIDUAL;
   conf.names.reserve(m_joint_names.size() * m_cmd_interface_types.size());
   for (const auto &type : m_cmd_interface_types) {
-    for (const auto &joint_name : m_joint_names) {
-      conf.names.push_back(joint_name + std::string("/").append(type));
+    if (type == hardware_interface::HW_IF_POSITION) {
+      for (const auto &joint_name : m_joint_names) {
+        conf.names.push_back(joint_name + std::string("/").append(type));
+      }
     }
   }
   return conf;
@@ -260,7 +262,7 @@ EffortControllerBase::on_configure(
   q_ns(4) = 0.0;
   q_ns(5) = -0.78;
   q_ns(6) = 0.0;
-  
+
   weights(0) = 1.0;
   weights(1) = 1.0;
   weights(2) = 1.0;
@@ -272,9 +274,7 @@ EffortControllerBase::on_configure(
   m_ik_solver_vel_nso.reset(
       new KDL::ChainIkSolverVel_pinv_nso(m_robot_chain, q_ns, weights));
 
-  RCLCPP_INFO(get_node()->get_logger(), "Using IK LMA solver");
-
-  m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
+      m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
   m_jnt_to_jac_dot_solver.reset(new KDL::ChainJntToJacDotSolver(m_robot_chain));
   m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain, grav));
   RCLCPP_INFO(get_node()->get_logger(),
