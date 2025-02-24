@@ -115,11 +115,14 @@ CartesianImpedanceController::on_configure(
 
 #if LOGGING
   XBot::MatLogger2::Options opt;
-  opt.default_buffer_size = 1e5; // set default buffer size
+  opt.default_buffer_size = 5e8; // set default buffer size
   opt.enable_compression = true;
   RCLCPP_INFO(get_node()->get_logger(), "\n\nCreating logger\n\n");
   m_logger = XBot::MatLogger2::MakeLogger("/tmp/cart_impedance.mat", opt);
-  m_logger->set_buffer_mode(XBot::VariableBuffer::Mode::circular_buffer);
+  // m_logger->set_buffer_mode(XBot::VariableBuffer::Mode::circular_buffer);
+  m_logger_appender = XBot::MatAppender::MakeInstance();
+  m_logger_appender->add_logger(m_logger);
+  m_logger_appender->start_flush_thread();
 
   // subscribe to lbr_fri_idl/msg/LBRState
   m_state_subscriber =
@@ -173,7 +176,7 @@ CartesianImpedanceController::on_deactivate(
     const rclcpp_lifecycle::State &previous_state) {
   // call logger destructor
 #if LOGGING
-  m_logger.reset();
+  // m_logger.reset();
   RCLCPP_WARN(get_node()->get_logger(), "\n\nFlushing logger\n\n");
 #endif
   // Stop drifting by sending zero joint velocities
@@ -241,8 +244,6 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
   return error;
 }
 void CartesianImpedanceController::computeTargetPos() {
-  KDL::Frame current_frame;
-
   Eigen::MatrixXd JJt;
   KDL::Jacobian J(Base::m_joint_number);
 
@@ -263,9 +264,9 @@ void CartesianImpedanceController::computeTargetPos() {
 
   for (int i = 0;; i++) {
     // Compute forward kinematics
-    Base::m_fk_solver->JntToCart(q, current_frame);
+    Base::m_fk_solver->JntToCart(q, m_current_frame);
     // Compute error (logarithm map from desired frame to current)
-    KDL::Twist delta_twist = KDL::diff(current_frame, m_target_frame);
+    KDL::Twist delta_twist = KDL::diff(m_current_frame, m_target_frame);
     for (int j = 0; j < 6; ++j) {
       err(j) = delta_twist[j];
     }
@@ -287,9 +288,9 @@ void CartesianImpedanceController::computeTargetPos() {
     JJt = J.data * J.data.transpose();
     JJt.diagonal().array() += damp;
 
-    // Compute velocity update
-    dq.data = J.data.transpose() * JJt.ldlt().solve(err);
-
+    // Compute velocity update considering also the nullspace
+    // dq = J^T(JJ^T)^-1 * e + (I - J^T(JJ^T)^-1 * J) * dt(q_starting_pose - q)
+    dq.data = J.data.transpose() * JJt.ldlt().solve(err); //+ (m_identity - J.data.transpose() * JJt.ldlt().solve(J.data)) * (m_q_starting_pose - q.data) * DT;
     // Integrate joint velocities (Euler integration)
     for (int j = 0; j < Base::m_joint_number; j++) {
       q(j) += dq.data(j) * DT;
@@ -303,9 +304,10 @@ void CartesianImpedanceController::computeTargetPos() {
   }
 
   m_target_joint_position = q.data;
+
 #if LOGGING
-  m_logger->add("time_sec", m_state.time_stamp_sec);
-  m_logger->add("time_nsec", m_state.time_stamp_nano_sec);
+  m_logger->add("time_sec", get_node()->get_clock()->now().seconds());
+  m_logger->add("time_nsec", get_node()->get_clock()->now().nanoseconds());
   // add cartesian traj
   m_logger->add("cart_target_x", m_target_frame.p.x());
   m_logger->add("cart_target_y", m_target_frame.p.y());
@@ -334,7 +336,7 @@ void CartesianImpedanceController::computeTargetPos() {
     return singular_values(0) / singular_values(singular_values.size() - 1);
   };
   m_logger->add("condition_number_jac", compute_condition_number(J.data));
-
+  m_logger->flush_available_data();
 #endif
 }
 

@@ -13,6 +13,7 @@
 #if LOGGING
 #include <lbr_fri_idl/msg/lbr_state.hpp>
 #include <matlogger2/matlogger2.h>
+#include <matlogger2/utils/mat_appender.h>
 #endif
 #define DEBUG 0
 
@@ -97,6 +98,7 @@ private:
   ctrl::VectorND m_target_joint_position;
 #if LOGGING
   XBot::MatLogger2::Ptr m_logger;
+  XBot::MatAppender::Ptr m_logger_appender;
   rclcpp::Subscription<lbr_fri_idl::msg::LBRState>::SharedPtr
       m_state_subscriber;
 #endif
