@@ -20,7 +20,6 @@ std::vector<double> cbfPositionFilter(KDL::Frame& filtered_target_frame,
   qpOASES::Options qpOptions;
   qpOptions.printLevel = qpOASES::PL_LOW;
   const int n_constraints = n.size();
-  std::cout << "n_constraints: " << n_constraints << std::endl;
   // gamma = 1.0 is the optimal value that reduces the constraint to n.T u >=
   // n.T (x - p) which is geometrically correct
   const double gamma = 1.0;

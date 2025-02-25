@@ -226,6 +226,11 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   ctrl::MatrixND jac = Base::m_jacobian.data;
   ctrl::MatrixND jac_tran_pseudo_inverse;
 
+  KDL::JntSpaceInertiaMatrix M(Base::m_joint_number);
+  m_dyn_solver->JntToMass(Base::m_joint_positions, M);
+
+  Eigen::MatrixXd Lambda = (jac * M.data.inverse() * jac.transpose()).inverse();
+
   pseudoInverse(jac.transpose(), &jac_tran_pseudo_inverse);
 
   // Redefine joints velocities in Eigen format
@@ -256,8 +261,8 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   }
 
   std::vector<double> logs;
-  auto logs1 =
-      planes_cbf::cbfPositionFilter(m_filtered_target, m_target_frame, n, p);
+  // auto logs1 =
+  //     planes_cbf::cbfPositionFilter(m_filtered_target, m_target_frame, n, p);
 
   // update every 0.02s
   if (vis_iter == 0) {
@@ -274,6 +279,7 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   // set limits (radiants) from initial orientation
   Eigen::Vector3d thetas(0.4, 0.4, 0.4);
   if (m_received_initial_frame) {
+  RCLCPP_INFO(get_node()->get_logger(), "dt: %f", dt);
     logs = conic_cbf::cbfOrientFilter(m_initial_frame, m_filtered_target,
                                       m_target_frame, thetas, dt);
   }
@@ -293,12 +299,14 @@ ctrl::VectorND CBFCartesianImpedanceController::computeTorque() {
   // Compute the stiffness and damping in the base link
   const auto base_link_stiffness =
       Base::displayInBaseLink(m_cartesian_stiffness, Base::m_end_effector_link);
-  const auto base_link_damping =
-      Base::displayInBaseLink(m_cartesian_damping, Base::m_end_effector_link);
+  // const auto base_link_damping =
+  //     Base::displayInBaseLink(m_cartesian_damping, Base::m_end_effector_link);
+
+  Eigen::MatrixXd K_d = base_link_stiffness;
+  auto D_d = compute_correct_damping(Lambda, K_d, 1.0);
 
   // Compute the task torque
-  tau_task = jac.transpose() * (base_link_stiffness * motion_error -
-                                (base_link_damping * (jac * q_dot)));
+  tau_task = jac.transpose() * (K_d * motion_error - (D_d * (jac * q_dot)));
 
   // Compute the null space torque
   q_null_space = m_q_starting_pose;
