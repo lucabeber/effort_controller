@@ -3,9 +3,7 @@
 ![build badge](https://github.com/lucabeber/effort_controller/actions/workflows/rolling.yml/badge.svg)
 
 
-This repository aim to create a robot independent torque controller based on ROS2 controllers. 
-There is a base controller that communicate with the hardware interface of the robot, on top of that controller different types of controllers can be implemented. 
-For now only a cartesian impedance controller is implemented but also other type of controllers like for example an admittance controller can be easily added. 
+This branch implements command the joint configuration to the [lbr_stack](https://github.com/idra-lab/lbr_fri_ros2_stack) KUKA hardware interface so it allows `Cartesian Impedance Control` as well as `Joint Position Control` depending on the command input chosen as `client_command_mode` in the hardware interface.
 
 Check out their use in the KUKA LBR example [here](https://github.com/idra-lab/kuka_impedance)!  
 
