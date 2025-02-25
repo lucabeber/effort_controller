@@ -17,7 +17,7 @@
 #endif
 #define DEBUG 0
 
-namespace cartesian_impedance_controller {
+namespace kuka_cartesian_impedance_controller {
 
 /**
  * @brief A ROS2-control controller for Effort force control
@@ -42,10 +42,10 @@ namespace cartesian_impedance_controller {
  * case.
  *
  */
-class CartesianImpedanceController
+class KukaCartesianImpedanceController
     : public virtual effort_controller_base::EffortControllerBase {
 public:
-  CartesianImpedanceController();
+  KukaCartesianImpedanceController();
 
   virtual LifecycleNodeInterface::CallbackReturn on_init() override;
 

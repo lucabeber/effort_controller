@@ -1,12 +1,12 @@
-#include <cartesian_impedance_controller/cartesian_impedance_controller.h>
+#include <kuka_cartesian_impedance_controller/kuka_cartesian_impedance_controller.h>
 
-namespace cartesian_impedance_controller {
+namespace kuka_cartesian_impedance_controller {
 
-CartesianImpedanceController::CartesianImpedanceController()
+KukaCartesianImpedanceController::KukaCartesianImpedanceController()
     : Base::EffortControllerBase(), m_hand_frame_control(true) {}
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CartesianImpedanceController::on_init() {
+KukaCartesianImpedanceController::on_init() {
   const auto ret = Base::on_init();
   if (ret != rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
                  CallbackReturn::SUCCESS) {
@@ -32,7 +32,7 @@ CartesianImpedanceController::on_init() {
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CartesianImpedanceController::on_configure(
+KukaCartesianImpedanceController::on_configure(
     const rclcpp_lifecycle::State &previous_state) {
   const auto ret = Base::on_configure(previous_state);
   if (ret != rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
@@ -94,20 +94,20 @@ CartesianImpedanceController::on_configure(
   m_target_wrench_subscriber =
       get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
           get_node()->get_name() + std::string("/target_wrench"), 10,
-          std::bind(&CartesianImpedanceController::targetWrenchCallback, this,
+          std::bind(&KukaCartesianImpedanceController::targetWrenchCallback, this,
                     std::placeholders::_1));
 
   // m_ft_sensor_wrench_subscriber =
   //   get_node()->create_subscription<geometry_msgs::msg::WrenchStamped>(
   //     get_node()->get_name() + std::string("/ft_sensor_wrench"),
   //     10,
-  //     std::bind(&CartesianImpedanceController::ftSensorWrenchCallback, this,
+  //     std::bind(&KukaCartesianImpedanceController::ftSensorWrenchCallback, this,
   //     std::placeholders::_1));
 
   m_target_frame_subscriber =
       get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
           get_node()->get_name() + std::string("/target_frame"), 3,
-          std::bind(&CartesianImpedanceController::targetFrameCallback, this,
+          std::bind(&KukaCartesianImpedanceController::targetFrameCallback, this,
                     std::placeholders::_1));
 
   m_data_publisher = get_node()->create_publisher<debug_msg::msg::Debug>(
@@ -128,7 +128,7 @@ CartesianImpedanceController::on_configure(
   m_state_subscriber =
       get_node()->create_subscription<lbr_fri_idl::msg::LBRState>(
           "/lbr/state", 1,
-          std::bind(&CartesianImpedanceController::stateCallback, this,
+          std::bind(&KukaCartesianImpedanceController::stateCallback, this,
                     std::placeholders::_1));
 #endif
 
@@ -137,7 +137,7 @@ CartesianImpedanceController::on_configure(
       CallbackReturn::SUCCESS;
 }
 #if LOGGING
-void CartesianImpedanceController::stateCallback(
+void KukaCartesianImpedanceController::stateCallback(
     const lbr_fri_idl::msg::LBRState::SharedPtr state) {
   m_state = *state;
   // m_logger->add("commanded_torque:", state->commanded_torque.data);
@@ -146,7 +146,7 @@ void CartesianImpedanceController::stateCallback(
 #endif
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CartesianImpedanceController::on_activate(
+KukaCartesianImpedanceController::on_activate(
     const rclcpp_lifecycle::State &previous_state) {
   Base::on_activate(previous_state);
 
@@ -172,7 +172,7 @@ CartesianImpedanceController::on_activate(
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-CartesianImpedanceController::on_deactivate(
+KukaCartesianImpedanceController::on_deactivate(
     const rclcpp_lifecycle::State &previous_state) {
   // call logger destructor
 #if LOGGING
@@ -189,7 +189,7 @@ CartesianImpedanceController::on_deactivate(
 }
 
 controller_interface::return_type
-CartesianImpedanceController::update(const rclcpp::Time &time,
+KukaCartesianImpedanceController::update(const rclcpp::Time &time,
                                      const rclcpp::Duration &period) {
   // Update joint states
   Base::updateJointStates();
@@ -207,7 +207,7 @@ CartesianImpedanceController::update(const rclcpp::Time &time,
   return controller_interface::return_type::OK;
 }
 
-ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
+ctrl::Vector6D KukaCartesianImpedanceController::computeMotionError() {
   // Compute the cartesian error between the current and the target frame
 
   // Transformation from target -> current corresponds to error = target -
@@ -243,7 +243,7 @@ ctrl::Vector6D CartesianImpedanceController::computeMotionError() {
 
   return error;
 }
-void CartesianImpedanceController::computeTargetPos() {
+void KukaCartesianImpedanceController::computeTargetPos() {
   Eigen::MatrixXd JJt;
   KDL::Jacobian J(Base::m_joint_number);
 
@@ -340,7 +340,7 @@ void CartesianImpedanceController::computeTargetPos() {
 #endif
 }
 
-ctrl::VectorND CartesianImpedanceController::computeTorque() {
+ctrl::VectorND KukaCartesianImpedanceController::computeTorque() {
   // Compute the forward kinematics
   Base::m_fk_solver->JntToCart(Base::m_joint_positions, m_current_frame);
 
@@ -462,7 +462,7 @@ ctrl::VectorND CartesianImpedanceController::computeTorque() {
   return tau;
 }
 
-void CartesianImpedanceController::targetWrenchCallback(
+void KukaCartesianImpedanceController::targetWrenchCallback(
     const geometry_msgs::msg::WrenchStamped::SharedPtr wrench) {
   // Parse the target wrench
   m_target_wrench[0] = wrench->wrench.force.x;
@@ -480,7 +480,7 @@ void CartesianImpedanceController::targetWrenchCallback(
   }
 }
 
-void CartesianImpedanceController::targetFrameCallback(
+void KukaCartesianImpedanceController::targetFrameCallback(
     const geometry_msgs::msg::PoseStamped::SharedPtr target) {
   if (target->header.frame_id != Base::m_robot_base_link) {
     auto &clock = *get_node()->get_clock();
@@ -504,5 +504,5 @@ void CartesianImpedanceController::targetFrameCallback(
 #include <pluginlib/class_list_macros.hpp>
 
 PLUGINLIB_EXPORT_CLASS(
-    cartesian_impedance_controller::CartesianImpedanceController,
+    kuka_cartesian_impedance_controller::KukaCartesianImpedanceController,
     controller_interface::ControllerInterface)

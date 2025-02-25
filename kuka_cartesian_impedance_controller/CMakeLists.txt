@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(cartesian_impedance_controller)
+project(kuka_cartesian_impedance_controller)
 
 set(CMAKE_CXX_STANDARD 17)
 set(ADDITIONAL_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Wno-unused-parameter)
@@ -59,7 +59,7 @@ ament_export_dependencies(
 # Libraries
 #--------------------------------------------------------------------------------
 add_library(${PROJECT_NAME} SHARED
-  src/cartesian_impedance_controller.cpp
+  src/kuka_cartesian_impedance_controller.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -86,7 +86,7 @@ endif()
 # Install and export
 #--------------------------------------------------------------------------------
 
-pluginlib_export_plugin_description_file(controller_interface cartesian_impedance_controller_plugin.xml)
+pluginlib_export_plugin_description_file(controller_interface kuka_cartesian_impedance_controller_plugin.xml)
 
 install(
   DIRECTORY include/
