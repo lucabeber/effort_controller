@@ -75,8 +75,6 @@ public:
 private:
   ctrl::Vector6D compensateGravity();
 
-  void targetWrenchCallback(
-      const geometry_msgs::msg::WrenchStamped::SharedPtr wrench);
   void
   targetFrameCallback(const geometry_msgs::msg::PoseStamped::SharedPtr target);
   ctrl::Vector6D computeMotionError();
@@ -85,16 +83,10 @@ private:
   void stateCallback(const lbr_fri_idl::msg::LBRState::SharedPtr state);
   lbr_fri_idl::msg::LBRState m_state;
 #endif
-  rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
-      m_target_wrench_subscriber;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
       m_target_frame_subscriber;
   rclcpp::Publisher<debug_msg::msg::Debug>::SharedPtr m_data_publisher;
   KDL::Frame m_target_frame;
-  ctrl::Vector6D m_ft_sensor_wrench;
-  std::string m_ft_sensor_ref_link;
-  KDL::Frame m_ft_sensor_transform;
-
   ctrl::VectorND m_target_joint_position;
 #if LOGGING
   XBot::MatLogger2::Ptr m_logger;
@@ -122,18 +114,6 @@ private:
    */
   bool m_hand_frame_control;
 
-  double theta_from_matrix(Eigen::Matrix3d &R) {
-    return std::acos((R.trace() - 1) / 2);
-  }
-  // logaritmic map from rotation matrix
-  Eigen::Vector3d log_map(Eigen::Matrix3d &R) {
-    double theta = theta_from_matrix(R);
-    if (theta == 0) {
-      return Eigen::Vector3d::Zero();
-    }
-    Eigen::Matrix3d log_R = theta / (2 * std::sin(theta)) * (R - R.transpose());
-    return Eigen::Vector3d(log_R(2, 1), log_R(0, 2), log_R(1, 0));
-  }
 };
 
 } // namespace cartesian_impedance_controller

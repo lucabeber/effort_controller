@@ -44,7 +44,6 @@ ament_export_dependencies(
 #--------------------------------------------------------------------------------
 add_library(${PROJECT_NAME} SHARED
   src/effort_controller_base.cpp
-  src/chainjnttojacdotsolver.cpp
 )
 
 # Manual includes for local directories and non-ament packages

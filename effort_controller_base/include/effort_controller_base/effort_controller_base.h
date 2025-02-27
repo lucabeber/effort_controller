@@ -33,10 +33,8 @@
 #include <trajectory_msgs/msg/joint_trajectory_point.hpp>
 #include <vector>
 
-#include "chainjnttojacdotsolver.hpp"
 #include "controller_interface/controller_interface.hpp"
 #include "controller_interface/helpers.hpp"
-#include "double_diagonalization.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "pseudo_inversion.h"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
@@ -179,7 +177,6 @@ protected:
   KDL::Jacobian m_jacobian; // Jacobian
 
   std::shared_ptr<KDL::ChainJntToJacSolver> m_jnt_to_jac_solver;
-  std::shared_ptr<KDL::ChainJntToJacDotSolver> m_jnt_to_jac_dot_solver;
   std::shared_ptr<KDL::TreeFkSolverPos_recursive> m_forward_kinematics_solver;
   std::shared_ptr<KDL::ChainFkSolverPos_recursive> m_fk_solver;
   std::shared_ptr<KDL::ChainIkSolverPos_NR_JL> m_ik_solver;
@@ -199,8 +196,6 @@ protected:
   std::string m_end_effector_link;
   std::string m_compliance_ref_link;
   std::string m_robot_base_link;
-  bool m_compensate_gravity;
-  bool m_compensate_coriolis;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>
       m_joint_state_pos_handles;
   std::vector<std::reference_wrapper<hardware_interface::LoanedStateInterface>>

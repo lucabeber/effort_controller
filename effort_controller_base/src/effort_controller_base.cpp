@@ -62,10 +62,6 @@ EffortControllerBase::on_init() {
     auto_declare<std::string>("robot_base_link", "");
     auto_declare<std::string>("compliance_ref_link", "");
     auto_declare<std::string>("end_effector_link", "");
-    auto_declare<bool>("kuka_hw", false);
-    auto_declare<bool>("compensate_gravity", false);
-    auto_declare<bool>("compensate_coriolis", false);
-    auto_declare<double>("delta_tau_max", 1.0);
 
     auto_declare<std::vector<std::string>>("joints",
                                            std::vector<std::string>());
@@ -116,26 +112,6 @@ EffortControllerBase::on_configure(
   if (m_configured) {
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::SUCCESS;
-  }
-
-  m_compensate_gravity =
-      get_node()->get_parameter("compensate_gravity").as_bool();
-  m_compensate_coriolis =
-      get_node()->get_parameter("compensate_coriolis").as_bool();
-
-  RCLCPP_WARN_STREAM(get_node()->get_logger(), "Gravity compensation set to "
-                                                   << std::boolalpha
-                                                   << m_compensate_gravity);
-  RCLCPP_WARN_STREAM(get_node()->get_logger(), "Coriolis compensation set to "
-                                                   << std::boolalpha
-                                                   << m_compensate_coriolis);
-  // // Get delta tau maximum
-  m_delta_tau_max = get_node()->get_parameter("delta_tau_max").as_double();
-  if (m_delta_tau_max < 1.0) {
-    RCLCPP_ERROR(get_node()->get_logger(),
-                 "delta_tau_max must be greater than 1.0 Nm");
-    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-        CallbackReturn::ERROR;
   }
 
   // Get kinematics specific configuration
@@ -274,8 +250,7 @@ EffortControllerBase::on_configure(
   m_ik_solver_vel_nso.reset(
       new KDL::ChainIkSolverVel_pinv_nso(m_robot_chain, q_ns, weights));
 
-      m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
-  m_jnt_to_jac_dot_solver.reset(new KDL::ChainJntToJacDotSolver(m_robot_chain));
+  m_jnt_to_jac_solver.reset(new KDL::ChainJntToJacSolver(m_robot_chain));
   m_dyn_solver.reset(new KDL::ChainDynParam(m_robot_chain, grav));
   RCLCPP_INFO(get_node()->get_logger(),
               "Finished initializing kinematics solvers");
@@ -298,15 +273,6 @@ EffortControllerBase::on_configure(
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
         CallbackReturn::ERROR;
   }
-  // for (const auto &type : m_cmd_interface_types) {
-  //   if (type != hardware_interface::HW_IF_EFFORT) {
-  //     RCLCPP_ERROR(get_node()->get_logger(),
-  //                  "Unsupported command interface: %s. Choose effort",
-  //                  type.c_str());
-  //     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::
-  //         CallbackReturn::ERROR;
-  //   }
-  // }
   m_state_interface_types =
       get_node()->get_parameter("state_interfaces").as_string_array();
   if (m_state_interface_types.empty()) {
@@ -315,14 +281,7 @@ EffortControllerBase::on_configure(
         CallbackReturn::ERROR;
   }
   // Check if kuka is been used
-  m_kuka_hw = get_node()->get_parameter("kuka_hw").as_bool();
-  if (m_kuka_hw == true) {
-    RCLCPP_WARN(
-        get_node()->get_logger(),
-        "Using Kuka, the position will be overwritten at each control cycle to "
-        "make the robot behave as in gravity compensation mode");
-    m_cmd_interface_types.push_back(hardware_interface::HW_IF_POSITION);
-  }
+  m_cmd_interface_types.push_back(hardware_interface::HW_IF_POSITION);
   m_configured = true;
 
   // Initialize effords to null
@@ -367,7 +326,6 @@ EffortControllerBase::on_activate(
 
   // Get command handles.
   // Position
-  if (m_kuka_hw == true) {
     if (!controller_interface::get_ordered_interfaces(
             command_interfaces_, m_joint_names,
             hardware_interface::HW_IF_POSITION, m_joint_cmd_pos_handles)) {
@@ -377,18 +335,6 @@ EffortControllerBase::on_activate(
                    m_joint_cmd_pos_handles.size());
       return CallbackReturn::ERROR;
     }
-  }
-  // Effort
-  // if (!controller_interface::get_ordered_interfaces(
-  //         command_interfaces_, m_joint_names,
-  //         hardware_interface::HW_IF_EFFORT, m_joint_cmd_eff_handles)) {
-  //   RCLCPP_ERROR(get_node()->get_logger(),
-  //                "Expected %zu '%s' command interfaces, got %zu.",
-  //                m_joint_number, hardware_interface::HW_IF_EFFORT,
-  //                m_joint_cmd_eff_handles.size());
-  //   return CallbackReturn::ERROR;
-  // }
-
   RCLCPP_INFO(get_node()->get_logger(), "Finished getting command interfaces");
   // Get state handles.
   // Position
@@ -416,18 +362,6 @@ EffortControllerBase::on_activate(
   }
 
   RCLCPP_INFO(get_node()->get_logger(), "Finished getting state interfaces");
-  // Copy joint state to internal simulation
-  // if (!m_ik_solver->setStartState(m_joint_state_pos_handles))
-  // {
-  //   RCLCPP_ERROR(get_node()->get_logger(), "Could not set start state");
-  //   return
-  //   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::ERROR;
-  // };
-  // m_ik_solver->updateKinematics();
-
-  // // Provide safe command buffers with starting where we are
-  // computeJointEffortCmds(ctrl::VectorND::Zero(m_joint_number));
-  // writeJointEffortCmds();
 
   m_active = true;
   RCLCPP_INFO(get_node()->get_logger(), "Finished Base on_activate");
@@ -437,36 +371,9 @@ EffortControllerBase::on_activate(
 
 void EffortControllerBase::writeJointEffortCmds(
     ctrl::VectorND &target_joint_positions) {
-  // Write all available types.
-  // for (const auto &type : m_cmd_interface_types) {
-  //   if (type == hardware_interface::HW_IF_EFFORT) {
-  //     for (size_t i = 0; i < m_joint_number; ++i) {
-  //       // Effort saturation
-  //       m_efforts[i] = std::clamp(m_efforts[i], -m_joint_effort_limits(i),
-  //                                 m_joint_effort_limits(i));
-  //       m_joint_cmd_eff_handles[i].get().set_value(m_efforts[i]);
-  //     }
-  //   }
-  // }
-  if (m_kuka_hw == true) {
     for (size_t i = 0; i < m_joint_number; ++i) {
       m_joint_cmd_pos_handles[i].get().set_value(target_joint_positions(i));
     }
-  }
-}
-
-void EffortControllerBase::computeJointEffortCmds(const ctrl::VectorND &tau) {
-  // Saturation of torque rate
-  // for (size_t i = 0; i < m_joint_number; i++) {
-  //   const double difference = tau[i] - m_efforts[i];
-  //   m_efforts[i] +=
-  //       std::min(std::max(difference, -m_delta_tau_max), m_delta_tau_max);
-  //   if (std::abs(difference) > m_delta_tau_max) {
-  //     // RCLCPP_WARN(get_node()->get_logger(),
-  //     //             "Joint %s effort rate saturated, was: %f",
-  //     //             m_joint_names[i].c_str(), tau[i]);
-  //   }
-  // }
 }
 
 void EffortControllerBase::computeIKSolution(
